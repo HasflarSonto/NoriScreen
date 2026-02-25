@@ -355,15 +355,15 @@
   // Eyes are vertical rounded rectangles — taller than wide, thin/narrow
   const eye = {
     // Current (animated) values
-    lx: 280, ly: 215, lw: 150, lh: 225, lr: 55,  // left eye x,y,w,h,radius
-    rx: 520, ry: 215, rw: 150, rh: 225, rr: 55,  // right eye
+    lx: 280, ly: 215, lw: 150, lh: 300, lr: 60,  // left eye x,y,w,h,radius
+    rx: 520, ry: 215, rw: 150, rh: 300, rr: 60,  // right eye
     lidL: 0, lidR: 0,       // eyelid closure 0=open, 1=fully closed
     pupilDx: 0, pupilDy: 0, // pupil offset from center
     tiltL: 0, tiltR: 0,     // rotation in radians (for confused look)
 
     // Target values for tweening
-    t_lx: 280, t_ly: 215, t_lw: 150, t_lh: 225,
-    t_rx: 520, t_ry: 215, t_rw: 150, t_rh: 225,
+    t_lx: 280, t_ly: 215, t_lw: 150, t_lh: 300,
+    t_rx: 520, t_ry: 215, t_rw: 150, t_rh: 300,
     t_lidL: 0, t_lidR: 0,
     t_pupilDx: 0, t_pupilDy: 0,
     t_tiltL: 0, t_tiltR: 0,
@@ -385,8 +385,8 @@
       case 'idle':
         // Relaxed 2:3 vertical pills
         return {
-          t_lx: 280, t_ly: baseY, t_lw: 150, t_lh: 225,
-          t_rx: 520, t_ry: baseY, t_rw: 150, t_rh: 225,
+          t_lx: 280, t_ly: baseY, t_lw: 150, t_lh: 300,
+          t_rx: 520, t_ry: baseY, t_rw: 150, t_rh: 300,
           t_lidL: 0, t_lidR: 0,
           t_pupilDx: 0, t_pupilDy: 0,
           t_tiltL: 0, t_tiltR: 0,
@@ -395,8 +395,8 @@
       case 'executing':
         // Focused — squinted, shorter
         return {
-          t_lx: 284, t_ly: baseY, t_lw: 140, t_lh: 130,
-          t_rx: 516, t_ry: baseY, t_rw: 140, t_rh: 130,
+          t_lx: 284, t_ly: baseY, t_lw: 140, t_lh: 170,
+          t_rx: 516, t_ry: baseY, t_rw: 140, t_rh: 170,
           t_lidL: 0.25, t_lidR: 0.25,
           t_pupilDx: 0, t_pupilDy: 4,
           t_tiltL: 0.03, t_tiltR: -0.03,
@@ -405,8 +405,8 @@
       case 'confirming':
         // Curious — one eye slightly bigger, slight tilt
         return {
-          t_lx: 276, t_ly: baseY - 6, t_lw: 144, t_lh: 216,
-          t_rx: 524, t_ry: baseY + 4, t_rw: 158, t_rh: 237,
+          t_lx: 276, t_ly: baseY - 6, t_lw: 144, t_lh: 288,
+          t_rx: 524, t_ry: baseY + 4, t_rw: 158, t_rh: 310,
           t_lidL: 0.05, t_lidR: 0,
           t_pupilDx: 4, t_pupilDy: 8,
           t_tiltL: -0.04, t_tiltR: 0.02,
@@ -415,8 +415,8 @@
       case 'completed':
         // Happy — squished into arcs
         return {
-          t_lx: 280, t_ly: baseY + 10, t_lw: 156, t_lh: 80,
-          t_rx: 520, t_ry: baseY + 10, t_rw: 156, t_rh: 80,
+          t_lx: 280, t_ly: baseY + 10, t_lw: 156, t_lh: 100,
+          t_rx: 520, t_ry: baseY + 10, t_rw: 156, t_rh: 100,
           t_lidL: 0.5, t_lidR: 0.5,
           t_pupilDx: 0, t_pupilDy: 0,
           t_tiltL: 0, t_tiltR: 0,
@@ -425,8 +425,8 @@
       case 'error':
         // Confused — asymmetric, droopy, tilted
         return {
-          t_lx: 286, t_ly: baseY + 10, t_lw: 138, t_lh: 190,
-          t_rx: 514, t_ry: baseY - 6, t_rw: 154, t_rh: 218,
+          t_lx: 286, t_ly: baseY + 10, t_lw: 138, t_lh: 254,
+          t_rx: 514, t_ry: baseY - 6, t_rw: 154, t_rh: 286,
           t_lidL: 0.15, t_lidR: 0.05,
           t_pupilDx: -6, t_pupilDy: 8,
           t_tiltL: 0.08, t_tiltR: -0.04,
@@ -435,8 +435,8 @@
       case 'stopped':
         // X eyes — squarish so the X reads well
         return {
-          t_lx: 280, t_ly: baseY, t_lw: 150, t_lh: 150,
-          t_rx: 520, t_ry: baseY, t_rw: 150, t_rh: 150,
+          t_lx: 280, t_ly: baseY, t_lw: 150, t_lh: 160,
+          t_rx: 520, t_ry: baseY, t_rw: 150, t_rh: 160,
           t_lidL: 0, t_lidR: 0,
           t_pupilDx: 0, t_pupilDy: 0,
           t_tiltL: 0, t_tiltR: 0,
