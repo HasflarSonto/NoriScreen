@@ -360,7 +360,7 @@
   // Canvas center
   const CX = 400, CY = 230;
   // Eye separation (LVGL ~70px from center each side)
-  const EYE_SEP = sx(80); // ~127px — wider apart for bigger face
+  const EYE_SEP = sx(100); // ~159px — wide apart
 
   // Max corner radius (LVGL 15 scaled) — generous rounding
   const MAX_RADIUS = Math.round(25 * SCALE_Y); // ~29px
@@ -385,52 +385,52 @@
   // Boolean: no_mouth, angry_brows, look_side, tilt_eyes, cat_face
   const EMOTIONS = {
     eyes_only: {
-      eye_w: 100, eye_h: 160, openness: 1.0,
+      eye_w: 105, eye_h: 220, openness: 1.0,
       mouth_curve: 0, mouth_open: 0, mouth_w: 0,
       no_mouth: true, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     neutral: {
-      eye_w: 100, eye_h: 160, openness: 1.0,
+      eye_w: 105, eye_h: 220, openness: 1.0,
       mouth_curve: 0, mouth_open: 0, mouth_w: 40,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     happy: {
-      eye_w: 105, eye_h: 160, openness: 0.4,
+      eye_w: 110, eye_h: 220, openness: 0.35,
       mouth_curve: 0.8, mouth_open: 0, mouth_w: 55,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     sad: {
-      eye_w: 100, eye_h: 140, openness: 0.7,
+      eye_w: 105, eye_h: 200, openness: 0.65,
       mouth_curve: -0.6, mouth_open: 0, mouth_w: 40,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
     },
     angry: {
-      eye_w: 110, eye_h: 160, openness: 0.4,
+      eye_w: 115, eye_h: 220, openness: 0.35,
       mouth_curve: -0.4, mouth_open: 0, mouth_w: 45,
       no_mouth: false, angry_brows: true, look_side: false, tilt_eyes: true, cat_face: false,
     },
     surprised: {
-      eye_w: 110, eye_h: 170, openness: 1.0,
+      eye_w: 115, eye_h: 230, openness: 1.0,
       mouth_curve: 0, mouth_open: 0.8, mouth_w: 40,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     thinking: {
-      eye_w: 90, eye_h: 130, openness: 0.75,
+      eye_w: 95, eye_h: 180, openness: 0.7,
       mouth_curve: 0, mouth_open: 0, mouth_w: 35,
       no_mouth: false, angry_brows: false, look_side: true, tilt_eyes: false, cat_face: false,
     },
     confused: {
-      eye_w: 105, eye_h: 150, openness: 0.85,
+      eye_w: 110, eye_h: 210, openness: 0.8,
       mouth_curve: -0.2, mouth_open: 0.15, mouth_w: 30,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
     },
     excited: {
-      eye_w: 110, eye_h: 160, openness: 0.35,
+      eye_w: 115, eye_h: 220, openness: 0.3,
       mouth_curve: 1.0, mouth_open: 0, mouth_w: 65,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     cat: {
-      eye_w: 100, eye_h: 150, openness: 0.9,
+      eye_w: 105, eye_h: 210, openness: 0.85,
       mouth_curve: 0.3, mouth_open: 0, mouth_w: 55,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: true,
     },
@@ -667,20 +667,23 @@
       return;
     }
 
-    // Apply openness and blink
+    // Apply openness and blink — this is how much of the eye is visible
     const effectiveOpen = openness * (1 - blinkAmt);
     const visH = h * effectiveOpen;
     if (visH < 2) { ctx.restore(); return; }
 
-    // Use a rounded-rect clip so narrowed eyes keep soft beveled edges
-    const r = Math.min(MAX_RADIUS, w / 2, visH / 2);
+    // Clip region = the visible slit (eyelids closing from top & bottom)
+    // Uses rounded rect so narrowed eyes always have beveled edges
+    const clipR = Math.min(MAX_RADIUS, w / 2, visH / 2);
     ctx.save();
-    drawRoundedRect(0, 0, w, visH, r);
+    drawRoundedRect(0, 0, w, visH, clipR);
     ctx.clip();
 
-    // Draw the full rounded-rect eye shape (white)
+    // Draw the FULL-SIZE eye shape inside the clip
+    // The eye itself doesn't shrink — the clip hides the top/bottom
+    const eyeR = Math.min(MAX_RADIUS, w / 2, h / 2);
     ctx.fillStyle = '#fff';
-    drawRoundedRect(0, 0, w, visH, r);
+    drawRoundedRect(0, 0, w, h, eyeR);
     ctx.fill();
 
     ctx.restore(); // clip
@@ -717,7 +720,7 @@
 
       // Whiskers — 3 per side, fanning outward from mouth edges
       const whiskerLen = sx(50);
-      const whiskerSpread = sy(10); // vertical fan spread per whisker
+      const whiskerSpread = sy(18); // vertical fan spread per whisker
       ctx.lineWidth = sx(1.5);
       for (let i = -1; i <= 1; i++) {
         const fanY = i * whiskerSpread;
@@ -848,7 +851,7 @@
     drawBrows(lx, ly, rx, ry, baseW, lH);
 
     // Draw mouth below eyes
-    const mouthY = CY + sy(95) + fOfsY;
+    const mouthY = CY + sy(115) + fOfsY;
     const mouthX = CX + fOfsX + thinkOfs;
     drawMouth(mouthX, mouthY);
   }
