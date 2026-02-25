@@ -337,7 +337,6 @@
   // ---- State ----
   const STATES = { IDLE: 'idle', EXECUTING: 'executing', CONFIRMING: 'confirming', COMPLETED: 'completed', ERROR: 'error', STOPPED: 'stopped' };
   let state = STATES.IDLE;
-  let mood  = 'idle';  // idle|executing|confirming|completed|error|stopped
   let ws    = null;
   let connected = false;
   let reconnectTimer = null;
@@ -351,218 +350,309 @@
   let errorMessage = '';
   let presets = [];
 
-  // ---- Eye parameters (animated) ----
-  // Eyes are vertical rounded rectangles — taller than wide, thin/narrow
-  const eye = {
-    // Current (animated) values
-    lx: 250, ly: 215, lw: 150, lh: 300, lr: 60,  // left eye x,y,w,h,radius
-    rx: 550, ry: 215, rw: 150, rh: 300, rr: 60,  // right eye
-    lidL: 0, lidR: 0,       // eyelid closure 0=open, 1=fully closed
-    pupilDx: 0, pupilDy: 0, // pupil offset from center
-    tiltL: 0, tiltR: 0,     // rotation in radians (for confused look)
+  // ---- LVGL-style Emotion Face Engine ----
+  // Coordinate scaling: LVGL 502x410 → 800x480
+  const SCALE_X = 800 / 502;  // ~1.593
+  const SCALE_Y = 480 / 410;  // ~1.171
+  function sx(v) { return v * SCALE_X; }
+  function sy(v) { return v * SCALE_Y; }
 
-    // Target values for tweening
-    t_lx: 250, t_ly: 215, t_lw: 150, t_lh: 300,
-    t_rx: 550, t_ry: 215, t_rw: 150, t_rh: 300,
-    t_lidL: 0, t_lidR: 0,
-    t_pupilDx: 0, t_pupilDy: 0,
-    t_tiltL: 0, t_tiltR: 0,
+  // Canvas center
+  const CX = 400, CY = 240;
+  // Eye separation (LVGL ~70px from center each side)
+  const EYE_SEP = sx(70); // ~111px
 
-    // Mouth (small, for expressions)
-    mouthY: 400, mouthW: 0, mouthH: 0, mouthCurve: 0, mouthOpen: 0,
-    t_mouthY: 400, t_mouthW: 0, t_mouthH: 0, t_mouthCurve: 0, t_mouthOpen: 0,
-  };
+  // Max corner radius (LVGL 15 scaled)
+  const MAX_RADIUS = Math.round(15 * SCALE_Y); // ~18px
 
-  // ---- Mood presets (target eye params) ----
-  // Eyes are narrow vertical rounded rects — taller than wide
-  function getMoodTargets(m, executing) {
-    // Base centered position (shifts up when bottom panel visible)
-    const yOff = executing ? -40 : 0;
-    const baseY = 210 + yOff;
-    const mouthBaseY = 400 + yOff;
+  // Gaze range (LVGL: X ~117px, Y ~63px → scaled)
+  const GAZE_RANGE_X = sx(117); // ~186px
+  const GAZE_RANGE_Y = sy(63);  // ~73px
 
-    switch (m) {
-      case 'idle':
-        // Relaxed 1:2 vertical pills
-        return {
-          t_lx: 250, t_ly: baseY, t_lw: 150, t_lh: 300,
-          t_rx: 550, t_ry: baseY, t_rw: 150, t_rh: 300,
-          t_lidL: 0, t_lidR: 0,
-          t_pupilDx: 0, t_pupilDy: 0,
-          t_tiltL: 0, t_tiltR: 0,
-          t_mouthY: mouthBaseY, t_mouthW: 44, t_mouthH: 10, t_mouthCurve: 8, t_mouthOpen: 0,
-        };
-      case 'executing':
-        // Focused — squinted, shorter
-        return {
-          t_lx: 254, t_ly: baseY, t_lw: 140, t_lh: 170,
-          t_rx: 546, t_ry: baseY, t_rw: 140, t_rh: 170,
-          t_lidL: 0.25, t_lidR: 0.25,
-          t_pupilDx: 0, t_pupilDy: 4,
-          t_tiltL: 0.03, t_tiltR: -0.03,
-          t_mouthY: mouthBaseY, t_mouthW: 30, t_mouthH: 5, t_mouthCurve: 0, t_mouthOpen: 0,
-        };
-      case 'confirming':
-        // Curious — one eye slightly bigger, slight tilt
-        return {
-          t_lx: 246, t_ly: baseY - 6, t_lw: 144, t_lh: 288,
-          t_rx: 554, t_ry: baseY + 4, t_rw: 158, t_rh: 310,
-          t_lidL: 0.05, t_lidR: 0,
-          t_pupilDx: 4, t_pupilDy: 8,
-          t_tiltL: -0.04, t_tiltR: 0.02,
-          t_mouthY: mouthBaseY + 4, t_mouthW: 26, t_mouthH: 18, t_mouthCurve: 0, t_mouthOpen: 1,
-        };
-      case 'completed':
-        // Happy — squished into arcs
-        return {
-          t_lx: 250, t_ly: baseY + 10, t_lw: 156, t_lh: 100,
-          t_rx: 550, t_ry: baseY + 10, t_rw: 156, t_rh: 100,
-          t_lidL: 0.5, t_lidR: 0.5,
-          t_pupilDx: 0, t_pupilDy: 0,
-          t_tiltL: 0, t_tiltR: 0,
-          t_mouthY: mouthBaseY - 14, t_mouthW: 52, t_mouthH: 12, t_mouthCurve: 16, t_mouthOpen: 0,
-        };
-      case 'error':
-        // Confused — asymmetric, droopy, tilted
-        return {
-          t_lx: 256, t_ly: baseY + 10, t_lw: 138, t_lh: 254,
-          t_rx: 544, t_ry: baseY - 6, t_rw: 154, t_rh: 286,
-          t_lidL: 0.15, t_lidR: 0.05,
-          t_pupilDx: -6, t_pupilDy: 8,
-          t_tiltL: 0.08, t_tiltR: -0.04,
-          t_mouthY: mouthBaseY + 10, t_mouthW: 40, t_mouthH: 8, t_mouthCurve: -10, t_mouthOpen: 0,
-        };
-      case 'stopped':
-        // X eyes — squarish so the X reads well
-        return {
-          t_lx: 250, t_ly: baseY, t_lw: 150, t_lh: 160,
-          t_rx: 550, t_ry: baseY, t_rw: 150, t_rh: 160,
-          t_lidL: 0, t_lidR: 0,
-          t_pupilDx: 0, t_pupilDy: 0,
-          t_tiltL: 0, t_tiltR: 0,
-          t_mouthY: mouthBaseY, t_mouthW: 0, t_mouthH: 0, t_mouthCurve: 0, t_mouthOpen: 0,
-        };
-      default:
-        return getMoodTargets('idle', executing);
-    }
-  }
+  // Face offset when gaze at edges
+  const FACE_OFFSET_X = sx(15);
+  const FACE_OFFSET_Y = sy(8);
 
-  function setMood(m) {
-    mood = m;
-    const showPanel = (state === STATES.EXECUTING || state === STATES.CONFIRMING || state === STATES.IDLE);
-    const targets = getMoodTargets(m, state === STATES.EXECUTING || state === STATES.CONFIRMING);
-    Object.assign(eye, targets);
-  }
-
-  // ---- Tweening ----
-  const TWEEN_SPEED = 0.12; // lerp factor per frame
+  // Think offset (eyes shift right)
+  const THINK_OFFSET_X = sx(30);
 
   function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-  function tweenEyes() {
-    const keys = [
-      'lx','ly','lw','lh','rx','ry','rw','rh',
-      'lidL','lidR','pupilDx','pupilDy','tiltL','tiltR',
-      'mouthY','mouthW','mouthH','mouthCurve','mouthOpen'
-    ];
-    for (const k of keys) {
-      eye[k] = lerp(eye[k], eye['t_' + k], TWEEN_SPEED);
+  // ---- Emotion Configs ----
+  // Each emotion defines eye/mouth parameters (LVGL-scale, converted at use)
+  // Numeric: eye_h, eye_w, openness (0-1), mouth_curve (-1 to 1), mouth_open (0-1), mouth_w
+  // Boolean: no_mouth, angry_brows, look_side, tilt_eyes, cat_face
+  const EMOTIONS = {
+    eyes_only: {
+      eye_w: 70, eye_h: 120, openness: 1.0,
+      mouth_curve: 0, mouth_open: 0, mouth_w: 0,
+      no_mouth: true, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
+    },
+    neutral: {
+      eye_w: 70, eye_h: 120, openness: 1.0,
+      mouth_curve: 0, mouth_open: 0, mouth_w: 30,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
+    },
+    happy: {
+      eye_w: 74, eye_h: 50, openness: 0.5,
+      mouth_curve: 0.8, mouth_open: 0, mouth_w: 40,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
+    },
+    sad: {
+      eye_w: 70, eye_h: 100, openness: 0.7,
+      mouth_curve: -0.6, mouth_open: 0, mouth_w: 30,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
+    },
+    angry: {
+      eye_w: 80, eye_h: 50, openness: 0.6,
+      mouth_curve: -0.4, mouth_open: 0, mouth_w: 35,
+      no_mouth: false, angry_brows: true, look_side: false, tilt_eyes: true, cat_face: false,
+    },
+    surprised: {
+      eye_w: 80, eye_h: 130, openness: 1.0,
+      mouth_curve: 0, mouth_open: 0.8, mouth_w: 30,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
+    },
+    thinking: {
+      eye_w: 65, eye_h: 80, openness: 0.75,
+      mouth_curve: 0, mouth_open: 0, mouth_w: 25,
+      no_mouth: false, angry_brows: false, look_side: true, tilt_eyes: false, cat_face: false,
+    },
+    confused: {
+      eye_w: 75, eye_h: 110, openness: 0.85,
+      mouth_curve: -0.2, mouth_open: 0.15, mouth_w: 22,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
+    },
+    excited: {
+      eye_w: 80, eye_h: 45, openness: 0.45,
+      mouth_curve: 1.0, mouth_open: 0, mouth_w: 50,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
+    },
+    cat: {
+      eye_w: 70, eye_h: 110, openness: 0.9,
+      mouth_curve: 0.3, mouth_open: 0, mouth_w: 35,
+      no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: true,
+    },
+  };
+
+  // Numeric keys we interpolate
+  const NUMERIC_KEYS = ['eye_w', 'eye_h', 'openness', 'mouth_curve', 'mouth_open', 'mouth_w'];
+  // Boolean keys that snap at 50%
+  const BOOL_KEYS = ['no_mouth', 'angry_brows', 'look_side', 'tilt_eyes', 'cat_face'];
+
+  // ---- Emotion State ----
+  let currentEmotionName = 'neutral';
+  let targetEmotionName = 'neutral';
+  // Interpolated numeric values (start at neutral)
+  let emo = Object.assign({}, EMOTIONS.neutral);
+  // Interpolation progress 0..1 (1 = fully arrived)
+  let emotionT = 1.0;
+  const EMOTION_SPEED = 2.5; // transitions per second
+
+  // Previous emotion for boolean snapping
+  let prevEmoBools = {};
+  for (const k of BOOL_KEYS) prevEmoBools[k] = EMOTIONS.neutral[k];
+
+  function setEmotion(name) {
+    if (!EMOTIONS[name]) name = 'neutral';
+    if (name === targetEmotionName && emotionT >= 1) return;
+    // Snapshot current booleans for snapping
+    for (const k of BOOL_KEYS) prevEmoBools[k] = emo[k];
+    targetEmotionName = name;
+    emotionT = 0;
+  }
+
+  function updateEmotionInterpolation(dt) {
+    if (emotionT >= 1) return;
+    emotionT = Math.min(1, emotionT + (EMOTION_SPEED * dt / 1000));
+    const target = EMOTIONS[targetEmotionName];
+    // We lerp from whatever the current animated values were at transition start.
+    // Since we continuously update, just lerp current toward target each frame.
+    for (const k of NUMERIC_KEYS) {
+      emo[k] = lerp(emo[k], target[k], EMOTION_SPEED * dt / 1000);
+    }
+    // Booleans snap at 50% progress
+    for (const k of BOOL_KEYS) {
+      emo[k] = emotionT >= 0.5 ? target[k] : prevEmoBools[k];
+    }
+    if (emotionT >= 1) {
+      // Snap numeric to exact targets
+      for (const k of NUMERIC_KEYS) emo[k] = target[k];
+      for (const k of BOOL_KEYS) emo[k] = target[k];
+      currentEmotionName = targetEmotionName;
     }
   }
 
-  // ---- Blink ----
-  let blinkPhase = 0; // 0=none, 1=closing, 2=hold, 3=opening
+  // Legacy mood variable (used by setState)
+  let mood = 'idle';
+  function setMood(m) {
+    mood = m;
+    // Map old mood names to new emotions
+    const moodToEmotion = {
+      idle: 'neutral',
+      executing: 'thinking',
+      confirming: 'confused',
+      completed: 'happy',
+      error: 'sad',
+      stopped: 'angry',
+    };
+    setEmotion(moodToEmotion[m] || 'neutral');
+  }
+
+  // ---- Blink System ----
+  // Quick close (30% of duration) / open (70% of duration)
+  const BLINK_DURATION = 180; // ms total
+  const BLINK_CLOSE_FRAC = 0.3;
+  let blinkPhase = 0; // 0=idle, 1=closing, 2=opening
   let blinkTimer = 0;
-  let nextBlink = 2000 + Math.random() * 4000;
   let blinkAccum = 0;
+  let nextBlink = 2000 + Math.random() * 3000; // 2-5s
+  let blinkAmountL = 0; // 0=open, 1=closed
+  let blinkAmountR = 0;
+  // Wink support (eye poke)
+  let winkEye = null; // 'left' or 'right'
+  let winkTimer = 0;
 
   function updateBlink(dt) {
-    if (mood === 'stopped') return; // no blink when stopped (X eyes)
+    if (mood === 'stopped') { blinkAmountL = 0; blinkAmountR = 0; return; }
 
+    // Wink logic
+    if (winkEye) {
+      winkTimer -= dt;
+      if (winkTimer <= 0) {
+        winkEye = null;
+      }
+    }
+
+    // Normal blink
     if (blinkPhase === 0) {
       blinkAccum += dt;
       if (blinkAccum >= nextBlink) {
         blinkPhase = 1;
         blinkTimer = 0;
         blinkAccum = 0;
-        nextBlink = 2000 + Math.random() * 4000;
+        nextBlink = 2000 + Math.random() * 3000;
       }
-    } else if (blinkPhase === 1) { // closing — 80ms
+      // Ease blink amount back to 0
+      blinkAmountL = lerp(blinkAmountL, 0, 0.2);
+      blinkAmountR = lerp(blinkAmountR, 0, 0.2);
+    } else if (blinkPhase === 1) { // closing (30% of duration)
       blinkTimer += dt;
-      const t = Math.min(blinkTimer / 80, 1);
-      // Drive lid directly (bypass lerp) for crisp blink
-      eye.lidL = t;
-      eye.lidR = t;
-      eye.t_lidL = t;
-      eye.t_lidR = t;
+      const closeDur = BLINK_DURATION * BLINK_CLOSE_FRAC;
+      const t = Math.min(blinkTimer / closeDur, 1);
+      blinkAmountL = t;
+      blinkAmountR = t;
       if (t >= 1) { blinkPhase = 2; blinkTimer = 0; }
-    } else if (blinkPhase === 2) { // hold — 60ms
+    } else if (blinkPhase === 2) { // opening (70% of duration)
       blinkTimer += dt;
-      eye.lidL = 1; eye.lidR = 1;
-      eye.t_lidL = 1; eye.t_lidR = 1;
-      if (blinkTimer >= 60) { blinkPhase = 3; blinkTimer = 0; }
-    } else if (blinkPhase === 3) { // opening — 80ms
-      blinkTimer += dt;
-      const moodTargets = getMoodTargets(mood, state === STATES.EXECUTING || state === STATES.CONFIRMING);
-      const t = 1 - Math.min(blinkTimer / 80, 1);
-      const lidL = Math.max(moodTargets.t_lidL, t);
-      const lidR = Math.max(moodTargets.t_lidR, t);
-      eye.lidL = lidL;
-      eye.lidR = lidR;
-      eye.t_lidL = lidL;
-      eye.t_lidR = lidR;
-      if (t <= 0) {
-        blinkPhase = 0; blinkTimer = 0;
-        eye.t_lidL = moodTargets.t_lidL;
-        eye.t_lidR = moodTargets.t_lidR;
-      }
+      const openDur = BLINK_DURATION * (1 - BLINK_CLOSE_FRAC);
+      const t = 1 - Math.min(blinkTimer / openDur, 1);
+      blinkAmountL = t;
+      blinkAmountR = t;
+      if (t <= 0) { blinkPhase = 0; blinkTimer = 0; }
+    }
+
+    // Apply wink override
+    if (winkEye === 'left') blinkAmountL = 1;
+    if (winkEye === 'right') blinkAmountR = 1;
+  }
+
+  // ---- Breathing System ----
+  // Continuous 8% sine pulse on eye size at 1.5 rad/s
+  let breathTime = 0;
+  const BREATH_RATE = 1.5; // rad/s
+  const BREATH_AMP = 0.08; // 8%
+
+  function getBreathScale(dt) {
+    breathTime += dt / 1000;
+    return 1 + BREATH_AMP * Math.sin(breathTime * BREATH_RATE);
+  }
+
+  // ---- Gaze System ----
+  // Smooth lerp toward target gaze position
+  let gazeX = 0, gazeY = 0;         // current gaze (-1 to 1 normalized)
+  let gazeTargetX = 0, gazeTargetY = 0;
+  const GAZE_LERP_SPEED = 3.0; // per second
+
+  function updateGaze(dt) {
+    const t = Math.min(1, GAZE_LERP_SPEED * dt / 1000);
+    gazeX = lerp(gazeX, gazeTargetX, t);
+    gazeY = lerp(gazeY, gazeTargetY, t);
+  }
+
+  // Get pixel offset for gaze
+  function gazePixelX() { return gazeX * GAZE_RANGE_X; }
+  function gazePixelY() { return gazeY * GAZE_RANGE_Y; }
+
+  // Face offset: shifts when gaze hits edges
+  function faceOffsetX() { return gazeX * FACE_OFFSET_X; }
+  function faceOffsetY() { return gazeY * FACE_OFFSET_Y; }
+
+  // ---- Idle Behavior ----
+  let idleGazeTimer = 0;
+  let nextIdleGaze = 1500 + Math.random() * 2500; // 1.5-4s
+  let idleEmotionTimer = 0;
+  let nextIdleEmotion = 8000 + Math.random() * 12000; // 8-20s
+  let idleBehaviorActive = false;
+  // Previous emotion to restore after touch interactions
+  let preInteractionEmotion = null;
+
+  function updateIdleBehavior(dt) {
+    if (!idleBehaviorActive) return;
+
+    // Random gaze drift every 1.5-4s, biased toward center
+    idleGazeTimer += dt;
+    if (idleGazeTimer >= nextIdleGaze) {
+      idleGazeTimer = 0;
+      nextIdleGaze = 1500 + Math.random() * 2500;
+      // Bias toward center: multiply by 0.6 to keep mostly centered
+      gazeTargetX = (Math.random() * 2 - 1) * 0.6;
+      gazeTargetY = (Math.random() * 2 - 1) * 0.4;
+    }
+
+    // Random emotion changes every 8-20s
+    idleEmotionTimer += dt;
+    if (idleEmotionTimer >= nextIdleEmotion) {
+      idleEmotionTimer = 0;
+      nextIdleEmotion = 8000 + Math.random() * 12000;
+      const r = Math.random();
+      let pick;
+      if (r < 0.50)      pick = 'eyes_only';
+      else if (r < 0.70) pick = 'happy';
+      else if (r < 0.85) pick = 'thinking';
+      else if (r < 0.95) pick = 'neutral';
+      else                pick = 'excited';
+      setEmotion(pick);
     }
   }
 
-  // ---- Idle pupil drift ----
-  let driftAngle = 0;
-  let driftTarget = { dx: 0, dy: 0 };
-  let driftTimer = 0;
-  let nextDrift = 3000 + Math.random() * 3000;
-
-  function updateDrift(dt) {
-    if (mood !== 'idle') return;
-    driftTimer += dt;
-    if (driftTimer >= nextDrift) {
-      driftTimer = 0;
-      nextDrift = 3000 + Math.random() * 3000;
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 3 + Math.random() * 6;
-      eye.t_pupilDx = Math.cos(angle) * dist;
-      eye.t_pupilDy = Math.sin(angle) * dist;
-    }
-  }
-
-  // ---- Drawing ----
-  function drawRoundedRect(x, y, w, h, r) {
+  // ---- Drawing Utilities ----
+  function drawRoundedRect(cx, cy, w, h, r) {
+    const x = cx - w / 2, y = cy - h / 2;
+    r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
-    ctx.moveTo(x - w/2 + r, y - h/2);
-    ctx.lineTo(x + w/2 - r, y - h/2);
-    ctx.arcTo(x + w/2, y - h/2, x + w/2, y - h/2 + r, r);
-    ctx.lineTo(x + w/2, y + h/2 - r);
-    ctx.arcTo(x + w/2, y + h/2, x + w/2 - r, y + h/2, r);
-    ctx.lineTo(x - w/2 + r, y + h/2);
-    ctx.arcTo(x - w/2, y + h/2, x - w/2, y + h/2 - r, r);
-    ctx.lineTo(x - w/2, y - h/2 + r);
-    ctx.arcTo(x - w/2, y - h/2, x - w/2 + r, y - h/2, r);
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
     ctx.closePath();
   }
 
-  function drawEye(cx, cy, w, h, lid, pdx, pdy, tilt) {
+  function drawEye(cx, cy, w, h, openness, blinkAmt, tiltAdj) {
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(tilt);
 
     if (mood === 'stopped') {
       // X eyes
       const s = Math.min(w, h) * 0.4;
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 8;
+      ctx.lineWidth = sx(5);
       ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(-s, -s); ctx.lineTo(s, s);
@@ -572,79 +662,204 @@
       return;
     }
 
-    // Eyelid closure: shrink visible height from top and bottom
-    const visH = h * (1 - lid);
-    if (visH < 2) { ctx.restore(); return; } // fully closed
+    // Apply openness and blink
+    const effectiveOpen = openness * (1 - blinkAmt);
+    const visH = h * effectiveOpen;
+    if (visH < 2) { ctx.restore(); return; }
 
-    // Create a clipping region for the visible eye area
-    // The clip rect shrinks from top and bottom as lid closes
+    // Clip to visible region (eyelid effect)
     ctx.save();
     ctx.beginPath();
-    ctx.rect(-w/2 - 1, -visH/2, w + 2, visH);
+    ctx.rect(-w / 2 - 1, -visH / 2, w + 2, visH);
     ctx.clip();
 
-    // Draw the full rounded-rect eye shape (white)
-    const r = Math.min(eye.lr, w/2, h/2, 35);
+    // Draw rounded rect eye
+    const r = Math.min(MAX_RADIUS, w / 2, h / 2);
     ctx.fillStyle = '#fff';
-    drawRoundedRect(0, 0, w, h, r);
+    drawRoundedRect(0, 0, w, h + tiltAdj, r);
     ctx.fill();
 
-    ctx.restore();
-    ctx.restore();
+    ctx.restore(); // clip
+    ctx.restore(); // translate
   }
 
-  function drawMouth(my, mw, mh, curve, open) {
-    if (mw < 1) return;
-    ctx.save();
-    ctx.translate(400, my);
+  // ---- Mouth Drawing ----
+  function drawMouth(cx, cy) {
+    if (emo.no_mouth) return;
 
-    if (open > 0.5) {
-      // Open mouth (small "o" for questioning)
+    const mw = sx(emo.mouth_w);
+    if (mw < 1) return;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    if (emo.cat_face) {
+      // Cat :3 mouth — omega shape + whiskers
+      const mhalf = mw / 2;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = sx(2.5);
+      ctx.lineCap = 'round';
+
+      // Omega/w shape for :3
+      ctx.beginPath();
+      // Left bump
+      ctx.moveTo(-mhalf, 0);
+      ctx.quadraticCurveTo(-mhalf * 0.5, sy(12), 0, 0);
+      // Right bump
+      ctx.quadraticCurveTo(mhalf * 0.5, sy(12), mhalf, 0);
+      ctx.stroke();
+
+      // Whiskers (3 per side)
+      const whiskerLen = sx(35);
+      const whiskerGap = sy(8);
+      ctx.lineWidth = sx(1.5);
+      for (let i = -1; i <= 1; i++) {
+        const yOff = i * whiskerGap;
+        // Left whiskers
+        ctx.beginPath();
+        ctx.moveTo(-mhalf - sx(3), yOff);
+        ctx.lineTo(-mhalf - whiskerLen, yOff - sy(3) * i);
+        ctx.stroke();
+        // Right whiskers
+        ctx.beginPath();
+        ctx.moveTo(mhalf + sx(3), yOff);
+        ctx.lineTo(mhalf + whiskerLen, yOff - sy(3) * i);
+        ctx.stroke();
+      }
+    } else if (emo.mouth_open > 0.3) {
+      // Surprised "O" circle
+      const radius = mw / 2 * clamp(emo.mouth_open, 0.3, 1);
+      const ry = radius * 1.2; // slightly taller
       ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.ellipse(0, 0, mw/2, mh/2, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, radius, ry, 0, 0, Math.PI * 2);
       ctx.fill();
       // Inner dark
       ctx.fillStyle = '#000';
       ctx.beginPath();
-      ctx.ellipse(0, 0, mw/2 - 3, mh/2 - 3, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, radius - sx(3), ry - sy(3), 0, 0, Math.PI * 2);
       ctx.fill();
-    } else {
-      // Curved line mouth
+    } else if (Math.abs(emo.mouth_curve) < 0.05) {
+      // Flat line
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = sx(2.5);
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(-mw/2, 0);
-      ctx.quadraticCurveTo(0, curve, mw/2, 0);
+      ctx.moveTo(-mw / 2, 0);
+      ctx.lineTo(mw / 2, 0);
+      ctx.stroke();
+    } else if (emo.mouth_curve > 0) {
+      // Smile arc
+      const curveY = sy(18) * emo.mouth_curve;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = sx(2.5);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-mw / 2, 0);
+      ctx.quadraticCurveTo(0, curveY, mw / 2, 0);
+      ctx.stroke();
+    } else {
+      // Frown arc
+      const curveY = sy(18) * emo.mouth_curve; // negative
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = sx(2.5);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-mw / 2, 0);
+      ctx.quadraticCurveTo(0, curveY, mw / 2, 0);
       ctx.stroke();
     }
 
     ctx.restore();
   }
 
-  function render() {
+  // ---- Angry Brows ----
+  function drawBrows(lx, ly, rx, ry, eyeW, eyeH) {
+    if (!emo.angry_brows) return;
+    const browW = eyeW * 1.1;
+    const browH = sy(6);
+    const gap = sy(12); // gap above eye top
+    ctx.fillStyle = '#fff';
+
+    // Left brow — angled down toward center
+    ctx.save();
+    ctx.translate(lx, ly - eyeH / 2 - gap);
+    ctx.rotate(0.15); // slight inward angle
+    ctx.fillRect(-browW / 2, -browH / 2, browW, browH);
+    ctx.restore();
+
+    // Right brow — angled down toward center (mirror)
+    ctx.save();
+    ctx.translate(rx, ry - eyeH / 2 - gap);
+    ctx.rotate(-0.15);
+    ctx.fillRect(-browW / 2, -browH / 2, browW, browH);
+    ctx.restore();
+  }
+
+  // ---- Render ----
+  function render(breathScale) {
     ctx.clearRect(0, 0, 800, 480);
 
-    // Draw eyes (pupil drift shifts eye position slightly for a "looking around" effect)
-    drawEye(eye.lx + eye.pupilDx * 0.5, eye.ly + eye.pupilDy * 0.5, eye.lw, eye.lh, eye.lidL, eye.pupilDx, eye.pupilDy, eye.tiltL);
-    drawEye(eye.rx + eye.pupilDx * 0.5, eye.ry + eye.pupilDy * 0.5, eye.rw, eye.rh, eye.lidR, eye.pupilDx, eye.pupilDy, eye.tiltR);
+    // Panel offset (shift face up when bottom panel visible)
+    const panelUp = (state === STATES.EXECUTING || state === STATES.CONFIRMING) ? -40 : 0;
 
-    // Draw mouth
-    drawMouth(eye.mouthY, eye.mouthW, eye.mouthH, eye.mouthCurve, eye.mouthOpen);
+    // Face offset from gaze at edges
+    const fOfsX = faceOffsetX();
+    const fOfsY = faceOffsetY() + panelUp;
+
+    // Think offset: eyes shift right when look_side is active
+    const thinkOfs = emo.look_side ? THINK_OFFSET_X : 0;
+
+    // Gaze pixel offsets
+    const gPx = gazePixelX();
+    const gPy = gazePixelY();
+
+    // Eye sizes from emotion config, scaled
+    const baseW = sx(emo.eye_w);
+    const baseH = sy(emo.eye_h) * breathScale;
+
+    // Tilt: asymmetric eye heights
+    let tiltAdjL = 0, tiltAdjR = 0;
+    if (emo.tilt_eyes) {
+      tiltAdjL = -sy(15); // left eye slightly shorter
+      tiltAdjR = sy(15);  // right eye slightly taller
+    }
+
+    // Eye positions
+    const lx = CX - EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
+    const ly = CY + fOfsY + gPy * 0.3;
+    const rx = CX + EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
+    const ry = CY + fOfsY + gPy * 0.3;
+
+    const lH = baseH + tiltAdjL;
+    const rH = baseH + tiltAdjR;
+
+    // Draw eyes
+    drawEye(lx, ly, baseW, lH, emo.openness, blinkAmountL, 0);
+    drawEye(rx, ry, baseW, rH, emo.openness, blinkAmountR, 0);
+
+    // Draw angry brows
+    drawBrows(lx, ly, rx, ry, baseW, lH);
+
+    // Draw mouth below eyes
+    const mouthY = CY + sy(80) + fOfsY;
+    const mouthX = CX + fOfsX + thinkOfs;
+    drawMouth(mouthX, mouthY);
   }
 
   // ---- Animation loop ----
   let lastTime = 0;
 
   function frame(time) {
-    const dt = lastTime ? (time - lastTime) : 16;
+    const dt = lastTime ? Math.min(time - lastTime, 50) : 16; // cap at 50ms
     lastTime = time;
 
+    updateEmotionInterpolation(dt);
     updateBlink(dt);
-    updateDrift(dt);
-    tweenEyes();
-    render();
+    const breathScale = getBreathScale(dt);
+    updateGaze(dt);
+    updateIdleBehavior(dt);
+    render(breathScale);
 
     requestAnimationFrame(frame);
   }
@@ -662,9 +877,18 @@
     $doneText.classList.remove('visible');
     $errorArea.classList.remove('visible');
 
+    // Disable idle behavior by default; re-enable only in IDLE
+    idleBehaviorActive = false;
+
     switch (newState) {
       case STATES.IDLE:
-        setMood('idle');
+        // Idle: activate idle behavior (random emotions + gaze drift)
+        idleBehaviorActive = true;
+        idleGazeTimer = 0;
+        idleEmotionTimer = 0;
+        setEmotion('neutral');
+        mood = 'idle';
+        gazeTargetX = 0; gazeTargetY = 0;
         // Show presets + chat if available
         if (presets.length > 0) {
           $presetArea.classList.add('active');
@@ -673,21 +897,32 @@
         break;
 
       case STATES.EXECUTING:
-        setMood('executing');
+        // Alternate thinking/neutral
+        mood = 'executing';
+        setEmotion(Math.random() < 0.6 ? 'thinking' : 'neutral');
+        gazeTargetX = 0; gazeTargetY = 0;
         $progress.classList.add('active');
         $panel.classList.add('visible');
         updateProgressUI();
         break;
 
       case STATES.CONFIRMING:
-        setMood('confirming');
+        mood = 'confirming';
+        setEmotion('confused');
+        gazeTargetX = 0; gazeTargetY = 0;
         $confirm.classList.add('active');
         $panel.classList.add('visible');
         break;
 
       case STATES.COMPLETED:
-        setMood('completed');
+        mood = 'completed';
+        setEmotion('happy');
+        gazeTargetX = 0; gazeTargetY = 0;
         $doneText.classList.add('visible');
+        // After 1s switch to excited
+        setTimeout(() => {
+          if (state === STATES.COMPLETED) setEmotion('excited');
+        }, 1000);
         // Return to idle after 3s
         setTimeout(() => {
           if (state === STATES.COMPLETED) setState(STATES.IDLE);
@@ -695,7 +930,9 @@
         break;
 
       case STATES.ERROR:
-        setMood('error');
+        mood = 'error';
+        setEmotion('sad');
+        gazeTargetX = 0; gazeTargetY = 0;
         $errorMsg.textContent = errorMessage;
         $errorArea.classList.add('visible');
         // Return to idle after 8s or on tap
@@ -705,7 +942,9 @@
         break;
 
       case STATES.STOPPED:
-        setMood('stopped');
+        mood = 'stopped';
+        setEmotion('angry');
+        gazeTargetX = 0; gazeTargetY = 0;
         break;
     }
   }
@@ -800,7 +1039,12 @@
         if (msg.mood === 'idle' && state === STATES.STOPPED) {
           setState(STATES.IDLE);
         } else if (msg.mood) {
-          setMood(msg.mood);
+          // Support both old mood names (via setMood) and direct emotion names
+          if (EMOTIONS[msg.mood]) {
+            setEmotion(msg.mood);
+          } else {
+            setMood(msg.mood);
+          }
         }
         break;
 
@@ -855,6 +1099,70 @@
     setState(STATES.EXECUTING);
   });
 
+  // ---- Touch Interactions (petting + eye poke) ----
+  let isPetting = false;
+  let dragStartX = 0, dragStartY = 0;
+  let dragMoved = false;
+  let pokeTimeout = null;
+
+  // Get canvas-relative coordinates from pointer event
+  function canvasXY(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width * 800,
+      y: (e.clientY - rect.top) / rect.height * 480,
+    };
+  }
+
+  // Check if a point is inside an eye bounding box
+  function hitTestEye(px, py) {
+    // Current eye positions (approximate from last render)
+    const panelUp = (state === STATES.EXECUTING || state === STATES.CONFIRMING) ? -40 : 0;
+    const fOfsX = faceOffsetX();
+    const fOfsY = faceOffsetY() + panelUp;
+    const thinkOfs = emo.look_side ? THINK_OFFSET_X : 0;
+    const gPx = gazePixelX();
+    const gPy = gazePixelY();
+    const baseW = sx(emo.eye_w);
+    const baseH = sy(emo.eye_h);
+
+    const lx = CX - EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
+    const ly = CY + fOfsY + gPy * 0.3;
+    const rx = CX + EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
+    const ry = CY + fOfsY + gPy * 0.3;
+
+    if (Math.abs(px - lx) < baseW / 2 && Math.abs(py - ly) < baseH / 2) return 'left';
+    if (Math.abs(px - rx) < baseW / 2 && Math.abs(py - ry) < baseH / 2) return 'right';
+    return null;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const { x, y } = canvasXY(e);
+    dragStartX = x;
+    dragStartY = y;
+    dragMoved = false;
+    isPetting = false;
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    const { x, y } = canvasXY(e);
+    const dx = x - dragStartX, dy = y - dragStartY;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      dragMoved = true;
+    }
+    if (dragMoved) {
+      // Petting: face follows finger
+      if (!isPetting) {
+        isPetting = true;
+        preInteractionEmotion = targetEmotionName;
+        setEmotion('cat');
+      }
+      // Steer gaze toward finger position (normalized -1 to 1)
+      gazeTargetX = clamp((x - CX) / (800 / 2), -1, 1);
+      gazeTargetY = clamp((y - CY) / (480 / 2), -1, 1);
+    }
+  });
+
   // ---- Double-tap to show/hide controls tray ----
   let lastTapTime = 0;
   let controlsVisible = false;
@@ -875,17 +1183,55 @@
   }
 
   canvas.addEventListener('pointerup', (e) => {
-    const now = Date.now();
-    if (now - lastTapTime < 350) {
-      // Double-tap detected
-      if (controlsVisible) {
-        hideControls();
-      } else {
-        showControls();
+    const { x, y } = canvasXY(e);
+
+    if (isPetting) {
+      // Release after petting: switch to happy, then restore
+      isPetting = false;
+      setEmotion('happy');
+      gazeTargetX = 0; gazeTargetY = 0;
+      // After 1.5s, restore previous emotion (if still idle)
+      setTimeout(() => {
+        if (state === STATES.IDLE && targetEmotionName === 'happy') {
+          setEmotion(preInteractionEmotion || 'neutral');
+        }
+      }, 1500);
+      return;
+    }
+
+    // Eye poke detection (only on taps, not drags)
+    if (!dragMoved) {
+      const eyeHit = hitTestEye(x, y);
+      if (eyeHit) {
+        // Wink that eye for 400ms, brief sad reaction
+        winkEye = eyeHit;
+        winkTimer = 400;
+        const prevEmo = targetEmotionName;
+        setEmotion('sad');
+        clearTimeout(pokeTimeout);
+        pokeTimeout = setTimeout(() => {
+          if (targetEmotionName === 'sad') {
+            setEmotion(prevEmo || 'neutral');
+          }
+        }, 600);
+        return; // don't process as double-tap
       }
-      lastTapTime = 0; // reset to avoid triple-tap toggling
-    } else {
-      lastTapTime = now;
+    }
+
+    // Double-tap detection (only when no drag and no eye poke)
+    if (!dragMoved) {
+      const now = Date.now();
+      if (now - lastTapTime < 350) {
+        // Double-tap detected
+        if (controlsVisible) {
+          hideControls();
+        } else {
+          showControls();
+        }
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now;
+      }
     }
   });
 
@@ -960,7 +1306,6 @@
   // ---- Init ----
   async function init() {
     await loadConfig();
-    setMood('idle');
     setState(STATES.IDLE);
     requestAnimationFrame(frame);
     connectWS();
