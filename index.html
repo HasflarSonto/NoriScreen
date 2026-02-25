@@ -358,7 +358,7 @@
   function sy(v) { return v * SCALE_Y; }
 
   // Canvas center
-  const CX = 400, CY = 230;
+  const CX = 400, CY = 210;
   // Eye separation (LVGL ~70px from center each side)
   const EYE_SEP = sx(100); // ~159px — wide apart
 
@@ -501,66 +501,59 @@
   }
 
   // ---- Blink System ----
-  // Quick close (30% of duration) / open (70% of duration)
-  const BLINK_CLOSE_MS = 60;   // closing phase
-  const BLINK_HOLD_MS = 30;    // hold closed
-  const BLINK_OPEN_MS = 140;   // opening phase (slower)
-  let blinkPhase = 0; // 0=idle, 1=closing, 2=hold, 3=opening
-  let blinkT = 0;     // timer within current phase
+  // Each eye has its own blink state so winks use the same animation
+  const BLINK_CLOSE_MS = 60;
+  const BLINK_HOLD_MS = 30;
+  const BLINK_OPEN_MS = 140;
+
+  // Per-eye blink state
+  const blinkL = { phase: 0, t: 0, amount: 0 };
+  const blinkR = { phase: 0, t: 0, amount: 0 };
   let blinkAccum = 0;
-  let nextBlink = 2000 + Math.random() * 3000; // 2-5s
-  let blinkAmountL = 0; // 0=open, 1=closed
+  let nextBlink = 2000 + Math.random() * 3000;
+  // Convenience aliases used by drawEye
+  let blinkAmountL = 0;
   let blinkAmountR = 0;
-  // Wink support (eye poke)
-  let winkEye = null; // 'left' or 'right'
-  let winkTimer = 0;
+
+  function runBlinkState(b, dt) {
+    if (b.phase === 0) {
+      b.amount = 0;
+    } else if (b.phase === 1) {
+      b.t += dt;
+      b.amount = Math.min(b.t / BLINK_CLOSE_MS, 1);
+      if (b.amount >= 1) { b.phase = 2; b.t = 0; }
+    } else if (b.phase === 2) {
+      b.t += dt;
+      b.amount = 1;
+      if (b.t >= BLINK_HOLD_MS) { b.phase = 3; b.t = 0; }
+    } else if (b.phase === 3) {
+      b.t += dt;
+      b.amount = 1 - Math.min(b.t / BLINK_OPEN_MS, 1);
+      if (b.amount <= 0) { b.phase = 0; b.t = 0; b.amount = 0; }
+    }
+  }
+
+  function triggerBlink(b) {
+    if (b.phase !== 0) return; // already blinking
+    b.phase = 1; b.t = 0;
+  }
 
   function updateBlink(dt) {
     if (mood === 'stopped') { blinkAmountL = 0; blinkAmountR = 0; return; }
 
-    // Wink logic (independent of blink)
-    if (winkEye) {
-      winkTimer -= dt;
-      if (winkTimer <= 0) winkEye = null;
+    // Idle timer triggers both eyes together
+    blinkAccum += dt;
+    if (blinkAccum >= nextBlink) {
+      blinkAccum = 0;
+      nextBlink = 2000 + Math.random() * 3000;
+      triggerBlink(blinkL);
+      triggerBlink(blinkR);
     }
 
-    // Normal blink state machine
-    if (blinkPhase === 0) {
-      // Waiting for next blink
-      blinkAccum += dt;
-      blinkAmountL = 0;
-      blinkAmountR = 0;
-      if (blinkAccum >= nextBlink) {
-        blinkPhase = 1;
-        blinkT = 0;
-        blinkAccum = 0;
-        nextBlink = 2000 + Math.random() * 3000;
-      }
-    } else if (blinkPhase === 1) {
-      // Closing
-      blinkT += dt;
-      const t = Math.min(blinkT / BLINK_CLOSE_MS, 1);
-      blinkAmountL = t;
-      blinkAmountR = t;
-      if (t >= 1) { blinkPhase = 2; blinkT = 0; }
-    } else if (blinkPhase === 2) {
-      // Hold closed
-      blinkT += dt;
-      blinkAmountL = 1;
-      blinkAmountR = 1;
-      if (blinkT >= BLINK_HOLD_MS) { blinkPhase = 3; blinkT = 0; }
-    } else if (blinkPhase === 3) {
-      // Opening
-      blinkT += dt;
-      const t = 1 - Math.min(blinkT / BLINK_OPEN_MS, 1);
-      blinkAmountL = t;
-      blinkAmountR = t;
-      if (t <= 0) { blinkPhase = 0; blinkT = 0; }
-    }
-
-    // Apply wink override on top
-    if (winkEye === 'left') blinkAmountL = 1;
-    if (winkEye === 'right') blinkAmountR = 1;
+    runBlinkState(blinkL, dt);
+    runBlinkState(blinkR, dt);
+    blinkAmountL = blinkL.amount;
+    blinkAmountR = blinkR.amount;
   }
 
   // ---- Breathing System ----
@@ -669,7 +662,10 @@
 
     // Apply openness and blink — this is how much of the eye is visible
     const effectiveOpen = openness * (1 - blinkAmt);
-    const visH = h * effectiveOpen;
+    // Minimum visible height so eyes never get too thin (except full blink)
+    const MIN_VIS_H = sy(18);
+    const rawVisH = h * effectiveOpen;
+    const visH = blinkAmt > 0.9 ? rawVisH : Math.max(rawVisH, MIN_VIS_H);
     if (visH < 2) { ctx.restore(); return; }
 
     // Clip region = the visible slit (eyelids closing from top & bottom)
@@ -719,20 +715,19 @@
       ctx.stroke();
 
       // Whiskers — 3 per side, fanning outward from mouth edges
-      const whiskerLen = sx(50);
-      const whiskerSpread = sy(18); // vertical fan spread per whisker
+      const whiskerLen = sx(55);
       ctx.lineWidth = sx(1.5);
-      for (let i = -1; i <= 1; i++) {
-        const fanY = i * whiskerSpread;
-        // Left whiskers — extend left and fan vertically outward
+      const whiskerAngles = [-0.3, 0, 0.3]; // radians — fan spread
+      for (const ang of whiskerAngles) {
+        // Left whiskers
         ctx.beginPath();
-        ctx.moveTo(-mhalf - sx(5), sy(4));
-        ctx.lineTo(-mhalf - whiskerLen, sy(4) + fanY);
+        ctx.moveTo(-mhalf - sx(5), sy(5));
+        ctx.lineTo(-mhalf - sx(5) - whiskerLen * Math.cos(ang), sy(5) - whiskerLen * Math.sin(ang));
         ctx.stroke();
-        // Right whiskers — extend right and fan vertically outward
+        // Right whiskers
         ctx.beginPath();
-        ctx.moveTo(mhalf + sx(5), sy(4));
-        ctx.lineTo(mhalf + whiskerLen, sy(4) + fanY);
+        ctx.moveTo(mhalf + sx(5), sy(5));
+        ctx.lineTo(mhalf + sx(5) + whiskerLen * Math.cos(ang), sy(5) - whiskerLen * Math.sin(ang));
         ctx.stroke();
       }
     } else if (emo.mouth_open > 0.3) {
@@ -851,7 +846,7 @@
     drawBrows(lx, ly, rx, ry, baseW, lH);
 
     // Draw mouth below eyes
-    const mouthY = CY + sy(115) + fOfsY;
+    const mouthY = CY + sy(135) + fOfsY;
     const mouthX = CX + fOfsX + thinkOfs;
     drawMouth(mouthX, mouthY);
   }
@@ -1212,9 +1207,8 @@
     if (!dragMoved) {
       const eyeHit = hitTestEye(x, y);
       if (eyeHit) {
-        // Wink that eye for 400ms, brief sad reaction
-        winkEye = eyeHit;
-        winkTimer = 400;
+        // Trigger a real animated blink on that eye, brief sad reaction
+        triggerBlink(eyeHit === 'left' ? blinkL : blinkR);
         const prevEmo = targetEmotionName;
         setEmotion('sad');
         clearTimeout(pokeTimeout);
