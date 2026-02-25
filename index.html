@@ -366,11 +366,11 @@
   const MAX_RADIUS = Math.round(25 * SCALE_Y); // ~29px
 
   // Gaze range (LVGL: X ~117px, Y ~63px → scaled)
-  const GAZE_RANGE_X = sx(117); // ~186px
+  const GAZE_RANGE_X = sx(65); // ~103px — reduced to keep eyes on screen
   const GAZE_RANGE_Y = sy(63);  // ~73px
 
   // Face offset when gaze at edges
-  const FACE_OFFSET_X = sx(25);
+  const FACE_OFFSET_X = sx(12);
   const FACE_OFFSET_Y = sy(15);
 
   // Think offset (eyes shift right)
@@ -663,7 +663,7 @@
     // Apply openness and blink — this is how much of the eye is visible
     const effectiveOpen = openness * (1 - blinkAmt);
     // Minimum visible height so eyes never get too thin (except full blink)
-    const MIN_VIS_H = sy(18);
+    const MIN_VIS_H = sy(35);
     const rawVisH = h * effectiveOpen;
     const visH = blinkAmt > 0.9 ? rawVisH : Math.max(rawVisH, MIN_VIS_H);
     if (visH < 2) { ctx.restore(); return; }
