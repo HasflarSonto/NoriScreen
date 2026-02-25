@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=800,height=480,initial-scale=1,user-scalable=no">
+<title>NoriScreen</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 800px; height: 480px;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #fff;
+    -webkit-user-select: none; user-select: none;
+    /* cursor: none; */ /* uncomment for kiosk mode on Pi */
+    touch-action: none;
+  }
+  canvas#face {
+    position: absolute; top: 0; left: 0;
+    width: 800px; height: 480px;
+  }
+
+  /* ---------- overlays ---------- */
+  #overlay {
+    position: absolute; top: 0; left: 0;
+    width: 800px; height: 480px;
+    pointer-events: none;
+    display: flex; flex-direction: column;
+    justify-content: flex-end;
+  }
+  #overlay > * { pointer-events: auto; }
+
+  /* bottom panel (progress / confirm / presets) */
+  #bottom-panel {
+    width: 100%;
+    padding: 12px 20px 14px;
+    display: flex; flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    transition: opacity 0.3s, transform 0.3s;
+    opacity: 0; transform: translateY(20px);
+    pointer-events: none;
+  }
+  #bottom-panel.visible {
+    opacity: 1; transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* progress */
+  #progress-area { width: 100%; display: none; flex-direction: column; gap: 6px; align-items: center; }
+  #progress-area.active { display: flex; }
+  #progress-label {
+    font-size: 18px; font-weight: 500;
+    color: rgba(255,255,255,0.85);
+    text-align: center;
+    max-width: 600px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #progress-bar-track {
+    width: 360px; height: 10px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 5px; overflow: hidden;
+  }
+  #progress-bar-fill {
+    height: 100%; width: 0%;
+    background: #fff;
+    border-radius: 5px;
+    transition: width 0.4s ease;
+  }
+
+  /* confirm */
+  #confirm-area { width: 100%; display: none; flex-direction: column; gap: 12px; align-items: center; }
+  #confirm-area.active { display: flex; }
+  #confirm-prompt {
+    font-size: 17px; color: rgba(255,255,255,0.85);
+    text-align: center; max-width: 600px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #confirm-buttons { display: flex; gap: 24px; }
+  .confirm-btn {
+    min-width: 150px; height: 64px;
+    border: none; border-radius: 32px;
+    font-size: 20px; font-weight: 600;
+    cursor: pointer; color: #000;
+    transition: transform 0.12s, opacity 0.12s;
+  }
+  .confirm-btn:active { transform: scale(0.94); opacity: 0.85; }
+  #btn-approve { background: #4ade80; }
+  #btn-reject  { background: #f87171; }
+
+  /* presets */
+  #preset-area { width: 100%; display: none; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  #preset-area.active { display: flex; }
+  .preset-btn {
+    height: 40px; padding: 0 20px;
+    border: 1.5px solid rgba(255,255,255,0.25);
+    border-radius: 20px; background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.8); font-size: 15px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  }
+  .preset-btn:active { transform: scale(0.94); background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.5); }
+
+  /* controls tray (revealed on double-tap) */
+  #controls-tray {
+    position: absolute; bottom: 0; left: 0; width: 100%;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 14px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 90;
+  }
+  #controls-tray.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* chat button */
+  #chat-btn {
+    width: 48px; height: 48px;
+    border-radius: 24px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.55);
+    font-size: 22px; line-height: 48px; text-align: center;
+    cursor: pointer;
+  }
+  #chat-btn:active { background: rgba(255,255,255,0.15); }
+
+  #chat-overlay {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    display: none; flex-direction: column; justify-content: center; align-items: center;
+    gap: 12px;
+  }
+  #chat-overlay.visible { display: flex; }
+  #chat-input {
+    width: 500px; height: 48px;
+    border: 1.5px solid rgba(255,255,255,0.3);
+    border-radius: 24px; background: rgba(255,255,255,0.08);
+    color: #fff; font-size: 18px;
+    padding: 0 20px; outline: none;
+  }
+  #chat-input::placeholder { color: rgba(255,255,255,0.35); }
+  #chat-send {
+    width: 120px; height: 44px;
+    border: none; border-radius: 22px;
+    background: rgba(255,255,255,0.15); color: #fff;
+    font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  #chat-send:active { background: rgba(255,255,255,0.25); }
+  #chat-cancel {
+    background: none; border: none; color: rgba(255,255,255,0.4);
+    font-size: 14px; cursor: pointer; margin-top: 4px;
+  }
+
+  /* E-stop (inside controls tray) */
+  #estop {
+    width: 80px; height: 80px;
+    border-radius: 20px;
+    background: rgba(220, 38, 38, 0.7);
+    border: 2.5px solid rgba(255, 80, 80, 0.6);
+    color: #fff; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  #estop:active { background: rgba(220, 38, 38, 1); }
+
+  /* disconnected indicator */
+  #disconnected {
+    position: absolute; top: 10px; right: 10px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #f87171;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #disconnected.show { opacity: 1; }
+
+  /* completed overlay text */
+  #completed-text {
+    position: absolute; width: 100%; text-align: center;
+    bottom: 90px; font-size: 28px; font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #completed-text.visible { opacity: 1; }
+
+  /* error overlay */
+  #error-area {
+    position: absolute; width: 100%; text-align: center;
+    bottom: 80px; padding: 0 40px;
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #error-area.visible { opacity: 1; pointer-events: auto; }
+  #error-message {
+    font-size: 17px; color: rgba(255,255,255,0.75);
+    max-width: 500px; margin: 0 auto;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #error-tap-hint {
+    font-size: 13px; color: rgba(255,255,255,0.35);
+    margin-top: 8px;
+  }
+
+  /* settings overlay */
+  #settings-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.92);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center; gap: 14px;
+    z-index: 200;
+  }
+  #settings-overlay.visible { display: flex; }
+  #settings-overlay label { color: rgba(255,255,255,0.7); font-size: 15px; }
+  #settings-ip {
+    width: 300px; height: 44px;
+    border: 1.5px solid rgba(255,255,255,0.3); border-radius: 22px;
+    background: rgba(255,255,255,0.08); color: #fff;
+    font-size: 18px; padding: 0 18px; outline: none; text-align: center;
+  }
+  #settings-save {
+    width: 120px; height: 40px;
+    border: none; border-radius: 20px;
+    background: rgba(255,255,255,0.15); color: #fff;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  #settings-close {
+    background: none; border: none; color: rgba(255,255,255,0.35);
+    font-size: 13px; cursor: pointer; margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="face" width="800" height="480"></canvas>
+
+<div id="overlay">
+  <div id="bottom-panel">
+    <div id="progress-area">
+      <div id="progress-label"></div>
+      <div id="progress-bar-track"><div id="progress-bar-fill"></div></div>
+    </div>
+    <div id="confirm-area">
+      <div id="confirm-prompt"></div>
+      <div id="confirm-buttons">
+        <button class="confirm-btn" id="btn-approve">Approve</button>
+        <button class="confirm-btn" id="btn-reject">Reject</button>
+      </div>
+    </div>
+    <div id="preset-area"></div>
+  </div>
+</div>
+
+<div id="controls-tray">
+  <button id="chat-btn">&#x1F4AC;</button>
+  <button id="estop">E-STOP</button>
+</div>
+<div id="chat-overlay">
+  <input id="chat-input" type="text" placeholder="Type a message..." autocomplete="off">
+  <button id="chat-send">Send</button>
+  <button id="chat-cancel">cancel</button>
+</div>
+<div id="disconnected"></div>
+<div id="completed-text">Done!</div>
+
+<div id="error-area">
+  <div id="error-message"></div>
+  <div id="error-tap-hint">tap to dismiss</div>
+</div>
+
+<div id="settings-overlay">
+  <label>Laptop IP Address</label>
+  <input id="settings-ip" type="text" placeholder="192.168.1.100">
+  <button id="settings-save">Save</button>
+  <button id="settings-close">cancel</button>
+</div>
+
+<script>
+// ========================================================
+// NoriScreen — HomeBot Face & Control Interface
+// Target: Raspberry Pi 4 + 7" DSI (800x480), Chromium kiosk
+// ========================================================
+
+(function () {
+  'use strict';
+
+  // ---- Config ----
+  let CONFIG = { laptop_ip: '192.168.1.100', ws_port: 9090, ws_path: '/screen', estop_port: 9091, estop_path: '/estop' };
+
+  async function loadConfig() {
+    try {
+      const r = await fetch('config.json');
+      const c = await r.json();
+      Object.assign(CONFIG, c);
+    } catch (e) { console.warn('config.json not found, using defaults'); }
+  }
+
+  // ---- DOM refs ----
+  const canvas     = document.getElementById('face');
+  const ctx        = canvas.getContext('2d');
+  const $overlay   = document.getElementById('overlay');
+  const $panel     = document.getElementById('bottom-panel');
+  const $progress  = document.getElementById('progress-area');
+  const $progLabel = document.getElementById('progress-label');
+  const $progFill  = document.getElementById('progress-bar-fill');
+  const $confirm   = document.getElementById('confirm-area');
+  const $confPrompt= document.getElementById('confirm-prompt');
+  const $btnApprove= document.getElementById('btn-approve');
+  const $btnReject = document.getElementById('btn-reject');
+  const $presetArea= document.getElementById('preset-area');
+  const $ctrlTray  = document.getElementById('controls-tray');
+  const $chatBtn   = document.getElementById('chat-btn');
+  const $chatOver  = document.getElementById('chat-overlay');
+  const $chatInput = document.getElementById('chat-input');
+  const $chatSend  = document.getElementById('chat-send');
+  const $chatCancel= document.getElementById('chat-cancel');
+  const $estop     = document.getElementById('estop');
+  const $disc      = document.getElementById('disconnected');
+  const $doneText  = document.getElementById('completed-text');
+  const $errorArea = document.getElementById('error-area');
+  const $errorMsg  = document.getElementById('error-message');
+  const $settings  = document.getElementById('settings-overlay');
+  const $settingsIp= document.getElementById('settings-ip');
+  const $settingsSave = document.getElementById('settings-save');
+  const $settingsClose= document.getElementById('settings-close');
+
+  // ---- State ----
+  const STATES = { IDLE: 'idle', EXECUTING: 'executing', CONFIRMING: 'confirming', COMPLETED: 'completed', ERROR: 'error', STOPPED: 'stopped' };
+  let state = STATES.IDLE;
+  let mood  = 'idle';  // idle|executing|confirming|completed|error|stopped
+  let ws    = null;
+  let connected = false;
+  let reconnectTimer = null;
+
+  // Task tracking
+  let taskName = '';
+  let totalSteps = 0;
+  let currentStep = 0;
+  let stepName = '';
+  let confirmId = '';
+  let errorMessage = '';
+  let presets = [];
+
+  // ---- Eye parameters (animated) ----
+  // Eyes are horizontal rounded rectangles (wider than tall) — like pill shapes
+  const eye = {
+    // Current (animated) values
+    lx: 310, ly: 210, lw: 110, lh: 70, lr: 30,  // left eye x,y,w,h,radius
+    rx: 490, ry: 210, rw: 110, rh: 70, rr: 30,  // right eye
+    lidL: 0, lidR: 0,       // eyelid closure 0=open, 1=fully closed
+    pupilDx: 0, pupilDy: 0, // pupil offset from center
+    tiltL: 0, tiltR: 0,     // rotation in radians (for confused look)
+
+    // Target values for tweening
+    t_lx: 310, t_ly: 210, t_lw: 110, t_lh: 70,
+    t_rx: 490, t_ry: 210, t_rw: 110, t_rh: 70,
+    t_lidL: 0, t_lidR: 0,
+    t_pupilDx: 0, t_pupilDy: 0,
+    t_tiltL: 0, t_tiltR: 0,
+
+    // Mouth (small, for expressions)
+    mouthY: 290, mouthW: 0, mouthH: 0, mouthCurve: 0, mouthOpen: 0,
+    t_mouthY: 290, t_mouthW: 0, t_mouthH: 0, t_mouthCurve: 0, t_mouthOpen: 0,
+  };
+
+  // ---- Mood presets (target eye params) ----
+  // Eyes are thin horizontal pills. Width > height always.
+  function getMoodTargets(m, executing) {
+    // Base centered position (shifts up when bottom panel visible)
+    const yOff = executing ? -40 : 0;
+    const baseY = 210 + yOff;
+    const mouthBaseY = 290 + yOff;
+
+    switch (m) {
+      case 'idle':
+        // Relaxed, slightly rounded pills
+        return {
+          t_lx: 310, t_ly: baseY, t_lw: 110, t_lh: 70,
+          t_rx: 490, t_ry: baseY, t_rw: 110, t_rh: 70,
+          t_lidL: 0, t_lidR: 0,
+          t_pupilDx: 0, t_pupilDy: 0,
+          t_tiltL: 0, t_tiltR: 0,
+          t_mouthY: mouthBaseY, t_mouthW: 26, t_mouthH: 6, t_mouthCurve: 5, t_mouthOpen: 0,
+        };
+      case 'executing':
+        // Focused/determined — narrower, squinted, slightly angled inward
+        return {
+          t_lx: 312, t_ly: baseY, t_lw: 105, t_lh: 44,
+          t_rx: 488, t_ry: baseY, t_rw: 105, t_rh: 44,
+          t_lidL: 0.2, t_lidR: 0.2,
+          t_pupilDx: 0, t_pupilDy: 2,
+          t_tiltL: 0.03, t_tiltR: -0.03,
+          t_mouthY: mouthBaseY, t_mouthW: 16, t_mouthH: 3, t_mouthCurve: 0, t_mouthOpen: 0,
+        };
+      case 'confirming':
+        // Curious/questioning — one eye bigger, slight head tilt feel
+        return {
+          t_lx: 308, t_ly: baseY - 4, t_lw: 100, t_lh: 74,
+          t_rx: 492, t_ry: baseY + 2, t_rw: 114, t_rh: 78,
+          t_lidL: 0.05, t_lidR: 0,
+          t_pupilDx: 2, t_pupilDy: 4,
+          t_tiltL: -0.04, t_tiltR: 0.02,
+          t_mouthY: mouthBaseY + 2, t_mouthW: 14, t_mouthH: 10, t_mouthCurve: 0, t_mouthOpen: 1,
+        };
+      case 'completed':
+        // Happy — squished into happy arcs (very short height = closed happy eyes)
+        return {
+          t_lx: 310, t_ly: baseY + 4, t_lw: 114, t_lh: 36,
+          t_rx: 490, t_ry: baseY + 4, t_rw: 114, t_rh: 36,
+          t_lidL: 0.55, t_lidR: 0.55,
+          t_pupilDx: 0, t_pupilDy: 0,
+          t_tiltL: 0, t_tiltR: 0,
+          t_mouthY: mouthBaseY - 4, t_mouthW: 32, t_mouthH: 8, t_mouthCurve: 10, t_mouthOpen: 0,
+        };
+      case 'error':
+        // Confused/worried — asymmetric, one droopy, slight tilt
+        return {
+          t_lx: 314, t_ly: baseY + 6, t_lw: 96, t_lh: 56,
+          t_rx: 486, t_ry: baseY - 4, t_rw: 108, t_rh: 64,
+          t_lidL: 0.15, t_lidR: 0.05,
+          t_pupilDx: -4, t_pupilDy: 5,
+          t_tiltL: 0.08, t_tiltR: -0.04,
+          t_mouthY: mouthBaseY + 6, t_mouthW: 24, t_mouthH: 5, t_mouthCurve: -7, t_mouthOpen: 0,
+        };
+      case 'stopped':
+        // X eyes — square-ish for the X to look right
+        return {
+          t_lx: 310, t_ly: baseY, t_lw: 80, t_lh: 70,
+          t_rx: 490, t_ry: baseY, t_rw: 80, t_rh: 70,
+          t_lidL: 0, t_lidR: 0,
+          t_pupilDx: 0, t_pupilDy: 0,
+          t_tiltL: 0, t_tiltR: 0,
+          t_mouthY: mouthBaseY, t_mouthW: 0, t_mouthH: 0, t_mouthCurve: 0, t_mouthOpen: 0,
+        };
+      default:
+        return getMoodTargets('idle', executing);
+    }
+  }
+
+  function setMood(m) {
+    mood = m;
+    const showPanel = (state === STATES.EXECUTING || state === STATES.CONFIRMING || state === STATES.IDLE);
+    const targets = getMoodTargets(m, state === STATES.EXECUTING || state === STATES.CONFIRMING);
+    Object.assign(eye, targets);
+  }
+
+  // ---- Tweening ----
+  const TWEEN_SPEED = 0.12; // lerp factor per frame
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function tweenEyes() {
+    const keys = [
+      'lx','ly','lw','lh','rx','ry','rw','rh',
+      'lidL','lidR','pupilDx','pupilDy','tiltL','tiltR',
+      'mouthY','mouthW','mouthH','mouthCurve','mouthOpen'
+    ];
+    for (const k of keys) {
+      eye[k] = lerp(eye[k], eye['t_' + k], TWEEN_SPEED);
+    }
+  }
+
+  // ---- Blink ----
+  let blinkPhase = 0; // 0=none, 1=closing, 2=hold, 3=opening
+  let blinkTimer = 0;
+  let nextBlink = 2000 + Math.random() * 4000;
+  let blinkAccum = 0;
+
+  function updateBlink(dt) {
+    if (mood === 'stopped') return; // no blink when stopped (X eyes)
+
+    if (blinkPhase === 0) {
+      blinkAccum += dt;
+      if (blinkAccum >= nextBlink) {
+        blinkPhase = 1;
+        blinkTimer = 0;
+        blinkAccum = 0;
+        nextBlink = 2000 + Math.random() * 4000;
+      }
+    } else if (blinkPhase === 1) { // closing
+      blinkTimer += dt;
+      const t = Math.min(blinkTimer / 100, 1);
+      eye.t_lidL = Math.max(eye.t_lidL, t); // don't override mood lid if already higher
+      eye.t_lidR = Math.max(eye.t_lidR, t);
+      if (t >= 1) { blinkPhase = 2; blinkTimer = 0; }
+    } else if (blinkPhase === 2) { // hold
+      blinkTimer += dt;
+      eye.t_lidL = 1; eye.t_lidR = 1;
+      if (blinkTimer >= 80) { blinkPhase = 3; blinkTimer = 0; }
+    } else if (blinkPhase === 3) { // opening
+      blinkTimer += dt;
+      const t = 1 - Math.min(blinkTimer / 100, 1);
+      const moodTargets = getMoodTargets(mood, state === STATES.EXECUTING || state === STATES.CONFIRMING);
+      eye.t_lidL = Math.max(moodTargets.t_lidL, t);
+      eye.t_lidR = Math.max(moodTargets.t_lidR, t);
+      if (t <= 0) {
+        blinkPhase = 0; blinkTimer = 0;
+        // restore mood lids
+        eye.t_lidL = moodTargets.t_lidL;
+        eye.t_lidR = moodTargets.t_lidR;
+      }
+    }
+  }
+
+  // ---- Idle pupil drift ----
+  let driftAngle = 0;
+  let driftTarget = { dx: 0, dy: 0 };
+  let driftTimer = 0;
+  let nextDrift = 3000 + Math.random() * 3000;
+
+  function updateDrift(dt) {
+    if (mood !== 'idle') return;
+    driftTimer += dt;
+    if (driftTimer >= nextDrift) {
+      driftTimer = 0;
+      nextDrift = 3000 + Math.random() * 3000;
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 3 + Math.random() * 6;
+      eye.t_pupilDx = Math.cos(angle) * dist;
+      eye.t_pupilDy = Math.sin(angle) * dist;
+    }
+  }
+
+  // ---- Drawing ----
+  function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x - w/2 + r, y - h/2);
+    ctx.lineTo(x + w/2 - r, y - h/2);
+    ctx.arcTo(x + w/2, y - h/2, x + w/2, y - h/2 + r, r);
+    ctx.lineTo(x + w/2, y + h/2 - r);
+    ctx.arcTo(x + w/2, y + h/2, x + w/2 - r, y + h/2, r);
+    ctx.lineTo(x - w/2 + r, y + h/2);
+    ctx.arcTo(x - w/2, y + h/2, x - w/2, y + h/2 - r, r);
+    ctx.lineTo(x - w/2, y - h/2 + r);
+    ctx.arcTo(x - w/2, y - h/2, x - w/2 + r, y - h/2, r);
+    ctx.closePath();
+  }
+
+  function drawEye(cx, cy, w, h, lid, pdx, pdy, tilt) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(tilt);
+
+    if (mood === 'stopped') {
+      // X eyes
+      const s = Math.min(w, h) * 0.4;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-s, -s); ctx.lineTo(s, s);
+      ctx.moveTo(s, -s); ctx.lineTo(-s, s);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    // Eyelid closure: shrink visible height from top and bottom
+    const visH = h * (1 - lid);
+    if (visH < 2) { ctx.restore(); return; } // fully closed
+
+    // Create a clipping region for the visible eye area
+    // The clip rect shrinks from top and bottom as lid closes
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-w/2 - 1, -visH/2, w + 2, visH);
+    ctx.clip();
+
+    // Draw the full rounded-rect eye shape (white)
+    const r = Math.min(eye.lr, w/2, h/2, 35);
+    ctx.fillStyle = '#fff';
+    drawRoundedRect(0, 0, w, h, r);
+    ctx.fill();
+
+    ctx.restore();
+    ctx.restore();
+  }
+
+  function drawMouth(my, mw, mh, curve, open) {
+    if (mw < 1) return;
+    ctx.save();
+    ctx.translate(400, my);
+
+    if (open > 0.5) {
+      // Open mouth (small "o" for questioning)
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, mw/2, mh/2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner dark
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, mw/2 - 3, mh/2 - 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Curved line mouth
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-mw/2, 0);
+      ctx.quadraticCurveTo(0, curve, mw/2, 0);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, 800, 480);
+
+    // Draw eyes (pupil drift shifts eye position slightly for a "looking around" effect)
+    drawEye(eye.lx + eye.pupilDx * 0.5, eye.ly + eye.pupilDy * 0.5, eye.lw, eye.lh, eye.lidL, eye.pupilDx, eye.pupilDy, eye.tiltL);
+    drawEye(eye.rx + eye.pupilDx * 0.5, eye.ry + eye.pupilDy * 0.5, eye.rw, eye.rh, eye.lidR, eye.pupilDx, eye.pupilDy, eye.tiltR);
+
+    // Draw mouth
+    drawMouth(eye.mouthY, eye.mouthW, eye.mouthH, eye.mouthCurve, eye.mouthOpen);
+  }
+
+  // ---- Animation loop ----
+  let lastTime = 0;
+
+  function frame(time) {
+    const dt = lastTime ? (time - lastTime) : 16;
+    lastTime = time;
+
+    updateBlink(dt);
+    updateDrift(dt);
+    tweenEyes();
+    render();
+
+    requestAnimationFrame(frame);
+  }
+
+  // ---- State machine ----
+  function setState(newState) {
+    const prev = state;
+    state = newState;
+
+    // Hide all sub-areas
+    $progress.classList.remove('active');
+    $confirm.classList.remove('active');
+    $presetArea.classList.remove('active');
+    $panel.classList.remove('visible');
+    $doneText.classList.remove('visible');
+    $errorArea.classList.remove('visible');
+
+    switch (newState) {
+      case STATES.IDLE:
+        setMood('idle');
+        // Show presets + chat if available
+        if (presets.length > 0) {
+          $presetArea.classList.add('active');
+          $panel.classList.add('visible');
+        }
+        break;
+
+      case STATES.EXECUTING:
+        setMood('executing');
+        $progress.classList.add('active');
+        $panel.classList.add('visible');
+        updateProgressUI();
+        break;
+
+      case STATES.CONFIRMING:
+        setMood('confirming');
+        $confirm.classList.add('active');
+        $panel.classList.add('visible');
+        break;
+
+      case STATES.COMPLETED:
+        setMood('completed');
+        $doneText.classList.add('visible');
+        // Return to idle after 3s
+        setTimeout(() => {
+          if (state === STATES.COMPLETED) setState(STATES.IDLE);
+        }, 3000);
+        break;
+
+      case STATES.ERROR:
+        setMood('error');
+        $errorMsg.textContent = errorMessage;
+        $errorArea.classList.add('visible');
+        // Return to idle after 8s or on tap
+        setTimeout(() => {
+          if (state === STATES.ERROR) setState(STATES.IDLE);
+        }, 8000);
+        break;
+
+      case STATES.STOPPED:
+        setMood('stopped');
+        break;
+    }
+  }
+
+  function updateProgressUI() {
+    const label = stepName
+      ? `Step ${currentStep}/${totalSteps}: ${stepName}`
+      : `Step ${currentStep}/${totalSteps}`;
+    $progLabel.textContent = taskName ? `${taskName} — ${label}` : label;
+    const pct = totalSteps > 0 ? (currentStep / totalSteps) * 100 : 0;
+    $progFill.style.width = pct + '%';
+  }
+
+  // ---- WebSocket ----
+  function connectWS() {
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+
+    const url = `ws://${CONFIG.laptop_ip}:${CONFIG.ws_port}${CONFIG.ws_path}`;
+    console.log('Connecting to', url);
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      connected = true;
+      $disc.classList.remove('show');
+      clearTimeout(reconnectTimer);
+      console.log('WebSocket connected');
+    };
+
+    ws.onclose = () => {
+      connected = false;
+      $disc.classList.add('show');
+      ws = null;
+      scheduleReconnect();
+    };
+
+    ws.onerror = (e) => {
+      console.warn('WebSocket error', e);
+      ws.close();
+    };
+
+    ws.onmessage = (evt) => {
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch (e) { return; }
+      handleMessage(msg);
+    };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connectWS, 2000);
+  }
+
+  function sendMsg(obj) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case 'task_start':
+        taskName = msg.task_name || '';
+        totalSteps = msg.total_steps || 0;
+        currentStep = 0;
+        stepName = '';
+        setState(STATES.EXECUTING);
+        break;
+
+      case 'step_update':
+        currentStep = msg.current_step || 0;
+        stepName = msg.step_name || '';
+        totalSteps = msg.total_steps || totalSteps;
+        if (state === STATES.EXECUTING) updateProgressUI();
+        break;
+
+      case 'confirm_request':
+        confirmId = msg.id || '';
+        $confPrompt.textContent = msg.prompt || 'Confirm action?';
+        setState(STATES.CONFIRMING);
+        break;
+
+      case 'task_complete':
+        setState(STATES.COMPLETED);
+        break;
+
+      case 'task_error':
+        errorMessage = msg.message || 'An error occurred';
+        setState(STATES.ERROR);
+        break;
+
+      case 'set_mood':
+        if (msg.mood === 'idle' && state === STATES.STOPPED) {
+          setState(STATES.IDLE);
+        } else if (msg.mood) {
+          setMood(msg.mood);
+        }
+        break;
+
+      case 'set_presets':
+        presets = msg.presets || [];
+        renderPresets();
+        // If idle, show them
+        if (state === STATES.IDLE && presets.length > 0) {
+          $presetArea.classList.add('active');
+          $panel.classList.add('visible');
+        }
+        break;
+    }
+  }
+
+  // ---- Presets ----
+  function renderPresets() {
+    $presetArea.innerHTML = '';
+    for (const label of presets) {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = label;
+      btn.addEventListener('pointerup', () => {
+        sendMsg({ type: 'user_message', text: label });
+      });
+      $presetArea.appendChild(btn);
+    }
+  }
+
+  // ---- E-stop ----
+  $estop.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    // Immediate visual response
+    setState(STATES.STOPPED);
+    // Send via WebSocket
+    sendMsg({ type: 'estop', timestamp: Date.now() });
+    // Redundant HTTP POST
+    fetch(`http://${CONFIG.laptop_ip}:${CONFIG.estop_port}${CONFIG.estop_path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'estop', timestamp: Date.now() }),
+    }).catch(() => {}); // fire and forget
+  });
+
+  // ---- Confirm buttons ----
+  $btnApprove.addEventListener('pointerup', () => {
+    sendMsg({ type: 'confirm_response', id: confirmId, approved: true });
+    setState(STATES.EXECUTING);
+  });
+  $btnReject.addEventListener('pointerup', () => {
+    sendMsg({ type: 'confirm_response', id: confirmId, approved: false });
+    setState(STATES.EXECUTING);
+  });
+
+  // ---- Double-tap to show/hide controls tray ----
+  let lastTapTime = 0;
+  let controlsVisible = false;
+  let controlsHideTimer = null;
+
+  function showControls() {
+    controlsVisible = true;
+    $ctrlTray.classList.add('visible');
+    // Auto-hide after 5 seconds of no interaction
+    clearTimeout(controlsHideTimer);
+    controlsHideTimer = setTimeout(hideControls, 5000);
+  }
+
+  function hideControls() {
+    controlsVisible = false;
+    $ctrlTray.classList.remove('visible');
+    clearTimeout(controlsHideTimer);
+  }
+
+  canvas.addEventListener('pointerup', (e) => {
+    const now = Date.now();
+    if (now - lastTapTime < 350) {
+      // Double-tap detected
+      if (controlsVisible) {
+        hideControls();
+      } else {
+        showControls();
+      }
+      lastTapTime = 0; // reset to avoid triple-tap toggling
+    } else {
+      lastTapTime = now;
+    }
+  });
+
+  // Keep controls visible while interacting with them
+  $ctrlTray.addEventListener('pointerdown', () => {
+    clearTimeout(controlsHideTimer);
+  });
+  $ctrlTray.addEventListener('pointerup', () => {
+    clearTimeout(controlsHideTimer);
+    controlsHideTimer = setTimeout(hideControls, 5000);
+  });
+
+  // Long-press on chat button opens settings instead
+  let longPressTimer = null;
+  $chatBtn.addEventListener('pointerdown', () => {
+    longPressTimer = setTimeout(() => {
+      $settingsIp.value = CONFIG.laptop_ip;
+      $settings.classList.add('visible');
+      hideControls();
+    }, 2000);
+  });
+  $chatBtn.addEventListener('pointerup', (e) => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      // Short tap = open chat
+      if (!$settings.classList.contains('visible')) {
+        $chatOver.classList.add('visible');
+        $chatInput.value = '';
+        $chatInput.focus();
+        hideControls();
+      }
+    }
+  });
+  $chatBtn.addEventListener('pointercancel', () => clearTimeout(longPressTimer));
+
+  // ---- Chat ----
+  $chatCancel.addEventListener('pointerup', () => {
+    $chatOver.classList.remove('visible');
+  });
+  $chatSend.addEventListener('pointerup', () => {
+    const text = $chatInput.value.trim();
+    if (text) {
+      sendMsg({ type: 'user_message', text });
+      $chatInput.value = '';
+    }
+    $chatOver.classList.remove('visible');
+  });
+  $chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $chatSend.click();
+    if (e.key === 'Escape') $chatCancel.click();
+  });
+
+  // ---- Error dismiss ----
+  $errorArea.addEventListener('pointerup', () => {
+    if (state === STATES.ERROR) setState(STATES.IDLE);
+  });
+
+  $settingsSave.addEventListener('pointerup', () => {
+    const ip = $settingsIp.value.trim();
+    if (ip) {
+      CONFIG.laptop_ip = ip;
+      $settings.classList.remove('visible');
+      // Reconnect with new IP
+      if (ws) ws.close();
+      connectWS();
+    }
+  });
+  $settingsClose.addEventListener('pointerup', () => {
+    $settings.classList.remove('visible');
+  });
+
+  // ---- Init ----
+  async function init() {
+    await loadConfig();
+    setMood('idle');
+    setState(STATES.IDLE);
+    requestAnimationFrame(frame);
+    connectWS();
+  }
+
+  init();
+
+})();
+</script>
+</body>
+</html>
