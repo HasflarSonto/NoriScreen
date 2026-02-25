@@ -358,20 +358,20 @@
   function sy(v) { return v * SCALE_Y; }
 
   // Canvas center
-  const CX = 400, CY = 240;
+  const CX = 400, CY = 230;
   // Eye separation (LVGL ~70px from center each side)
-  const EYE_SEP = sx(70); // ~111px
+  const EYE_SEP = sx(80); // ~127px — wider apart for bigger face
 
-  // Max corner radius (LVGL 15 scaled)
-  const MAX_RADIUS = Math.round(15 * SCALE_Y); // ~18px
+  // Max corner radius (LVGL 15 scaled) — generous rounding
+  const MAX_RADIUS = Math.round(25 * SCALE_Y); // ~29px
 
   // Gaze range (LVGL: X ~117px, Y ~63px → scaled)
   const GAZE_RANGE_X = sx(117); // ~186px
   const GAZE_RANGE_Y = sy(63);  // ~73px
 
   // Face offset when gaze at edges
-  const FACE_OFFSET_X = sx(15);
-  const FACE_OFFSET_Y = sy(8);
+  const FACE_OFFSET_X = sx(25);
+  const FACE_OFFSET_Y = sy(15);
 
   // Think offset (eyes shift right)
   const THINK_OFFSET_X = sx(30);
@@ -385,53 +385,53 @@
   // Boolean: no_mouth, angry_brows, look_side, tilt_eyes, cat_face
   const EMOTIONS = {
     eyes_only: {
-      eye_w: 70, eye_h: 120, openness: 1.0,
+      eye_w: 100, eye_h: 160, openness: 1.0,
       mouth_curve: 0, mouth_open: 0, mouth_w: 0,
       no_mouth: true, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     neutral: {
-      eye_w: 70, eye_h: 120, openness: 1.0,
-      mouth_curve: 0, mouth_open: 0, mouth_w: 30,
+      eye_w: 100, eye_h: 160, openness: 1.0,
+      mouth_curve: 0, mouth_open: 0, mouth_w: 40,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     happy: {
-      eye_w: 74, eye_h: 50, openness: 0.5,
-      mouth_curve: 0.8, mouth_open: 0, mouth_w: 40,
+      eye_w: 105, eye_h: 160, openness: 0.4,
+      mouth_curve: 0.8, mouth_open: 0, mouth_w: 55,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     sad: {
-      eye_w: 70, eye_h: 100, openness: 0.7,
-      mouth_curve: -0.6, mouth_open: 0, mouth_w: 30,
+      eye_w: 100, eye_h: 140, openness: 0.7,
+      mouth_curve: -0.6, mouth_open: 0, mouth_w: 40,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
     },
     angry: {
-      eye_w: 80, eye_h: 50, openness: 0.6,
-      mouth_curve: -0.4, mouth_open: 0, mouth_w: 35,
+      eye_w: 110, eye_h: 160, openness: 0.4,
+      mouth_curve: -0.4, mouth_open: 0, mouth_w: 45,
       no_mouth: false, angry_brows: true, look_side: false, tilt_eyes: true, cat_face: false,
     },
     surprised: {
-      eye_w: 80, eye_h: 130, openness: 1.0,
-      mouth_curve: 0, mouth_open: 0.8, mouth_w: 30,
+      eye_w: 110, eye_h: 170, openness: 1.0,
+      mouth_curve: 0, mouth_open: 0.8, mouth_w: 40,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     thinking: {
-      eye_w: 65, eye_h: 80, openness: 0.75,
-      mouth_curve: 0, mouth_open: 0, mouth_w: 25,
+      eye_w: 90, eye_h: 130, openness: 0.75,
+      mouth_curve: 0, mouth_open: 0, mouth_w: 35,
       no_mouth: false, angry_brows: false, look_side: true, tilt_eyes: false, cat_face: false,
     },
     confused: {
-      eye_w: 75, eye_h: 110, openness: 0.85,
-      mouth_curve: -0.2, mouth_open: 0.15, mouth_w: 22,
+      eye_w: 105, eye_h: 150, openness: 0.85,
+      mouth_curve: -0.2, mouth_open: 0.15, mouth_w: 30,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
     },
     excited: {
-      eye_w: 80, eye_h: 45, openness: 0.45,
-      mouth_curve: 1.0, mouth_open: 0, mouth_w: 50,
+      eye_w: 110, eye_h: 160, openness: 0.35,
+      mouth_curve: 1.0, mouth_open: 0, mouth_w: 65,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     cat: {
-      eye_w: 70, eye_h: 110, openness: 0.9,
-      mouth_curve: 0.3, mouth_open: 0, mouth_w: 35,
+      eye_w: 100, eye_h: 150, openness: 0.9,
+      mouth_curve: 0.3, mouth_open: 0, mouth_w: 55,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: true,
     },
   };
@@ -502,10 +502,11 @@
 
   // ---- Blink System ----
   // Quick close (30% of duration) / open (70% of duration)
-  const BLINK_DURATION = 180; // ms total
-  const BLINK_CLOSE_FRAC = 0.3;
-  let blinkPhase = 0; // 0=idle, 1=closing, 2=opening
-  let blinkTimer = 0;
+  const BLINK_CLOSE_MS = 60;   // closing phase
+  const BLINK_HOLD_MS = 30;    // hold closed
+  const BLINK_OPEN_MS = 140;   // opening phase (slower)
+  let blinkPhase = 0; // 0=idle, 1=closing, 2=hold, 3=opening
+  let blinkT = 0;     // timer within current phase
   let blinkAccum = 0;
   let nextBlink = 2000 + Math.random() * 3000; // 2-5s
   let blinkAmountL = 0; // 0=open, 1=closed
@@ -517,43 +518,47 @@
   function updateBlink(dt) {
     if (mood === 'stopped') { blinkAmountL = 0; blinkAmountR = 0; return; }
 
-    // Wink logic
+    // Wink logic (independent of blink)
     if (winkEye) {
       winkTimer -= dt;
-      if (winkTimer <= 0) {
-        winkEye = null;
-      }
+      if (winkTimer <= 0) winkEye = null;
     }
 
-    // Normal blink
+    // Normal blink state machine
     if (blinkPhase === 0) {
+      // Waiting for next blink
       blinkAccum += dt;
+      blinkAmountL = 0;
+      blinkAmountR = 0;
       if (blinkAccum >= nextBlink) {
         blinkPhase = 1;
-        blinkTimer = 0;
+        blinkT = 0;
         blinkAccum = 0;
         nextBlink = 2000 + Math.random() * 3000;
       }
-      // Ease blink amount back to 0
-      blinkAmountL = lerp(blinkAmountL, 0, 0.2);
-      blinkAmountR = lerp(blinkAmountR, 0, 0.2);
-    } else if (blinkPhase === 1) { // closing (30% of duration)
-      blinkTimer += dt;
-      const closeDur = BLINK_DURATION * BLINK_CLOSE_FRAC;
-      const t = Math.min(blinkTimer / closeDur, 1);
+    } else if (blinkPhase === 1) {
+      // Closing
+      blinkT += dt;
+      const t = Math.min(blinkT / BLINK_CLOSE_MS, 1);
       blinkAmountL = t;
       blinkAmountR = t;
-      if (t >= 1) { blinkPhase = 2; blinkTimer = 0; }
-    } else if (blinkPhase === 2) { // opening (70% of duration)
-      blinkTimer += dt;
-      const openDur = BLINK_DURATION * (1 - BLINK_CLOSE_FRAC);
-      const t = 1 - Math.min(blinkTimer / openDur, 1);
+      if (t >= 1) { blinkPhase = 2; blinkT = 0; }
+    } else if (blinkPhase === 2) {
+      // Hold closed
+      blinkT += dt;
+      blinkAmountL = 1;
+      blinkAmountR = 1;
+      if (blinkT >= BLINK_HOLD_MS) { blinkPhase = 3; blinkT = 0; }
+    } else if (blinkPhase === 3) {
+      // Opening
+      blinkT += dt;
+      const t = 1 - Math.min(blinkT / BLINK_OPEN_MS, 1);
       blinkAmountL = t;
       blinkAmountR = t;
-      if (t <= 0) { blinkPhase = 0; blinkTimer = 0; }
+      if (t <= 0) { blinkPhase = 0; blinkT = 0; }
     }
 
-    // Apply wink override
+    // Apply wink override on top
     if (winkEye === 'left') blinkAmountL = 1;
     if (winkEye === 'right') blinkAmountR = 1;
   }
@@ -667,16 +672,15 @@
     const visH = h * effectiveOpen;
     if (visH < 2) { ctx.restore(); return; }
 
-    // Clip to visible region (eyelid effect)
+    // Use a rounded-rect clip so narrowed eyes keep soft beveled edges
+    const r = Math.min(MAX_RADIUS, w / 2, visH / 2);
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(-w / 2 - 1, -visH / 2, w + 2, visH);
+    drawRoundedRect(0, 0, w, visH, r);
     ctx.clip();
 
-    // Draw rounded rect eye
-    const r = Math.min(MAX_RADIUS, w / 2, h / 2);
+    // Draw the full rounded-rect eye shape (white)
     ctx.fillStyle = '#fff';
-    drawRoundedRect(0, 0, w, h + tiltAdj, r);
+    drawRoundedRect(0, 0, w, visH, r);
     ctx.fill();
 
     ctx.restore(); // clip
@@ -697,33 +701,35 @@
       // Cat :3 mouth — omega shape + whiskers
       const mhalf = mw / 2;
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = sx(2.5);
+      ctx.lineWidth = sx(3);
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-      // Omega/w shape for :3
+      // Omega/w shape for :3 — bigger, rounder bumps
+      const bumpH = sy(18); // vertical amplitude of bumps
       ctx.beginPath();
       // Left bump
       ctx.moveTo(-mhalf, 0);
-      ctx.quadraticCurveTo(-mhalf * 0.5, sy(12), 0, 0);
+      ctx.quadraticCurveTo(-mhalf * 0.5, bumpH, 0, sy(2));
       // Right bump
-      ctx.quadraticCurveTo(mhalf * 0.5, sy(12), mhalf, 0);
+      ctx.quadraticCurveTo(mhalf * 0.5, bumpH, mhalf, 0);
       ctx.stroke();
 
-      // Whiskers (3 per side)
-      const whiskerLen = sx(35);
-      const whiskerGap = sy(8);
+      // Whiskers — 3 per side, fanning outward from mouth edges
+      const whiskerLen = sx(50);
+      const whiskerSpread = sy(10); // vertical fan spread per whisker
       ctx.lineWidth = sx(1.5);
       for (let i = -1; i <= 1; i++) {
-        const yOff = i * whiskerGap;
-        // Left whiskers
+        const fanY = i * whiskerSpread;
+        // Left whiskers — extend left and fan vertically outward
         ctx.beginPath();
-        ctx.moveTo(-mhalf - sx(3), yOff);
-        ctx.lineTo(-mhalf - whiskerLen, yOff - sy(3) * i);
+        ctx.moveTo(-mhalf - sx(5), sy(4));
+        ctx.lineTo(-mhalf - whiskerLen, sy(4) + fanY);
         ctx.stroke();
-        // Right whiskers
+        // Right whiskers — extend right and fan vertically outward
         ctx.beginPath();
-        ctx.moveTo(mhalf + sx(3), yOff);
-        ctx.lineTo(mhalf + whiskerLen, yOff - sy(3) * i);
+        ctx.moveTo(mhalf + sx(5), sy(4));
+        ctx.lineTo(mhalf + whiskerLen, sy(4) + fanY);
         ctx.stroke();
       }
     } else if (emo.mouth_open > 0.3) {
@@ -825,11 +831,11 @@
       tiltAdjR = sy(15);  // right eye slightly taller
     }
 
-    // Eye positions
-    const lx = CX - EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
-    const ly = CY + fOfsY + gPy * 0.3;
-    const rx = CX + EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
-    const ry = CY + fOfsY + gPy * 0.3;
+    // Eye positions — gaze shifts eyes together
+    const lx = CX - EYE_SEP + fOfsX + gPx * 0.5 + thinkOfs;
+    const ly = CY + fOfsY + gPy * 0.5;
+    const rx = CX + EYE_SEP + fOfsX + gPx * 0.5 + thinkOfs;
+    const ry = CY + fOfsY + gPy * 0.5;
 
     const lH = baseH + tiltAdjL;
     const rH = baseH + tiltAdjR;
@@ -842,7 +848,7 @@
     drawBrows(lx, ly, rx, ry, baseW, lH);
 
     // Draw mouth below eyes
-    const mouthY = CY + sy(80) + fOfsY;
+    const mouthY = CY + sy(95) + fOfsY;
     const mouthX = CX + fOfsX + thinkOfs;
     drawMouth(mouthX, mouthY);
   }
