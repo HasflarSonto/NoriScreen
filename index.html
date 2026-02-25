@@ -308,14 +308,6 @@
   // ---- DOM refs ----
   const canvas     = document.getElementById('face');
   const ctx        = canvas.getContext('2d');
-
-  // Resize canvas to actual screen size
-  function resizeCanvas() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  resizeCanvas();
-  window.addEventListener('resize', resizeCanvas);
   const $overlay   = document.getElementById('overlay');
   const $panel     = document.getElementById('bottom-panel');
   const $progress  = document.getElementById('progress-area');
@@ -632,15 +624,7 @@
   }
 
   function render() {
-    const W = canvas.width;
-    const H = canvas.height;
-    // Scale factor relative to design size (800x480)
-    const sx = W / 800;
-    const sy = H / 480;
-
-    ctx.clearRect(0, 0, W, H);
-    ctx.save();
-    ctx.scale(sx, sy);
+    ctx.clearRect(0, 0, 800, 480);
 
     // Draw eyes (pupil drift shifts eye position slightly for a "looking around" effect)
     drawEye(eye.lx + eye.pupilDx * 0.5, eye.ly + eye.pupilDy * 0.5, eye.lw, eye.lh, eye.lidL, eye.pupilDx, eye.pupilDy, eye.tiltL);
@@ -648,8 +632,6 @@
 
     // Draw mouth
     drawMouth(eye.mouthY, eye.mouthW, eye.mouthH, eye.mouthCurve, eye.mouthOpen);
-
-    ctx.restore();
   }
 
   // ---- Animation loop ----
