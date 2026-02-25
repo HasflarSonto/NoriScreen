@@ -120,13 +120,13 @@
 
   /* chat button */
   #chat-btn {
-    height: 40px; padding: 0 16px;
+    width: 80px; height: 80px;
     border-radius: 20px;
     border: 1.5px solid rgba(255,255,255,0.18);
     background: rgba(255,255,255,0.06);
     color: rgba(255,255,255,0.55);
-    font-size: 14px; font-weight: 500;
-    line-height: 40px; text-align: center;
+    font-size: 14px; font-weight: 600;
+    line-height: 80px; text-align: center;
     cursor: pointer;
   }
   #chat-btn:active { background: rgba(255,255,255,0.15); }
@@ -355,15 +355,15 @@
   // Eyes are vertical rounded rectangles — taller than wide, thin/narrow
   const eye = {
     // Current (animated) values
-    lx: 320, ly: 210, lw: 60, lh: 90, lr: 26,  // left eye x,y,w,h,radius
-    rx: 480, ry: 210, rw: 60, rh: 90, rr: 26,  // right eye
+    lx: 290, ly: 210, lw: 100, lh: 140, lr: 40,  // left eye x,y,w,h,radius
+    rx: 510, ry: 210, rw: 100, rh: 140, rr: 40,  // right eye
     lidL: 0, lidR: 0,       // eyelid closure 0=open, 1=fully closed
     pupilDx: 0, pupilDy: 0, // pupil offset from center
     tiltL: 0, tiltR: 0,     // rotation in radians (for confused look)
 
     // Target values for tweening
-    t_lx: 320, t_ly: 210, t_lw: 60, t_lh: 90,
-    t_rx: 480, t_ry: 210, t_rw: 60, t_rh: 90,
+    t_lx: 290, t_ly: 210, t_lw: 100, t_lh: 140,
+    t_rx: 510, t_ry: 210, t_rw: 100, t_rh: 140,
     t_lidL: 0, t_lidR: 0,
     t_pupilDx: 0, t_pupilDy: 0,
     t_tiltL: 0, t_tiltR: 0,
@@ -385,58 +385,58 @@
       case 'idle':
         // Relaxed vertical ovals
         return {
-          t_lx: 320, t_ly: baseY, t_lw: 60, t_lh: 90,
-          t_rx: 480, t_ry: baseY, t_rw: 60, t_rh: 90,
+          t_lx: 290, t_ly: baseY, t_lw: 100, t_lh: 140,
+          t_rx: 510, t_ry: baseY, t_rw: 100, t_rh: 140,
           t_lidL: 0, t_lidR: 0,
           t_pupilDx: 0, t_pupilDy: 0,
           t_tiltL: 0, t_tiltR: 0,
-          t_mouthY: mouthBaseY, t_mouthW: 26, t_mouthH: 6, t_mouthCurve: 5, t_mouthOpen: 0,
+          t_mouthY: mouthBaseY, t_mouthW: 36, t_mouthH: 8, t_mouthCurve: 7, t_mouthOpen: 0,
         };
       case 'executing':
         // Focused — squinted (shorter height), slightly narrower
         return {
-          t_lx: 322, t_ly: baseY, t_lw: 56, t_lh: 50,
-          t_rx: 478, t_ry: baseY, t_rw: 56, t_rh: 50,
+          t_lx: 293, t_ly: baseY, t_lw: 94, t_lh: 80,
+          t_rx: 507, t_ry: baseY, t_rw: 94, t_rh: 80,
           t_lidL: 0.25, t_lidR: 0.25,
-          t_pupilDx: 0, t_pupilDy: 2,
+          t_pupilDx: 0, t_pupilDy: 3,
           t_tiltL: 0.03, t_tiltR: -0.03,
-          t_mouthY: mouthBaseY, t_mouthW: 16, t_mouthH: 3, t_mouthCurve: 0, t_mouthOpen: 0,
+          t_mouthY: mouthBaseY, t_mouthW: 24, t_mouthH: 4, t_mouthCurve: 0, t_mouthOpen: 0,
         };
       case 'confirming':
         // Curious — one eye slightly bigger/wider, slight tilt
         return {
-          t_lx: 318, t_ly: baseY - 4, t_lw: 56, t_lh: 84,
-          t_rx: 482, t_ry: baseY + 2, t_rw: 66, t_rh: 94,
+          t_lx: 286, t_ly: baseY - 6, t_lw: 94, t_lh: 130,
+          t_rx: 514, t_ry: baseY + 3, t_rw: 108, t_rh: 148,
           t_lidL: 0.05, t_lidR: 0,
-          t_pupilDx: 2, t_pupilDy: 4,
+          t_pupilDx: 3, t_pupilDy: 6,
           t_tiltL: -0.04, t_tiltR: 0.02,
-          t_mouthY: mouthBaseY + 2, t_mouthW: 14, t_mouthH: 10, t_mouthCurve: 0, t_mouthOpen: 1,
+          t_mouthY: mouthBaseY + 2, t_mouthW: 20, t_mouthH: 14, t_mouthCurve: 0, t_mouthOpen: 1,
         };
       case 'completed':
         // Happy — squished short, wide smile (like ^_^ eyes)
         return {
-          t_lx: 320, t_ly: baseY + 6, t_lw: 64, t_lh: 30,
-          t_rx: 480, t_ry: baseY + 6, t_rw: 64, t_rh: 30,
+          t_lx: 290, t_ly: baseY + 8, t_lw: 106, t_lh: 46,
+          t_rx: 510, t_ry: baseY + 8, t_rw: 106, t_rh: 46,
           t_lidL: 0.5, t_lidR: 0.5,
           t_pupilDx: 0, t_pupilDy: 0,
           t_tiltL: 0, t_tiltR: 0,
-          t_mouthY: mouthBaseY - 8, t_mouthW: 32, t_mouthH: 8, t_mouthCurve: 10, t_mouthOpen: 0,
+          t_mouthY: mouthBaseY - 10, t_mouthW: 44, t_mouthH: 10, t_mouthCurve: 14, t_mouthOpen: 0,
         };
       case 'error':
         // Confused — asymmetric heights, one droopy, tilted
         return {
-          t_lx: 324, t_ly: baseY + 6, t_lw: 54, t_lh: 74,
-          t_rx: 476, t_ry: baseY - 4, t_rw: 62, t_rh: 86,
+          t_lx: 296, t_ly: baseY + 8, t_lw: 90, t_lh: 116,
+          t_rx: 504, t_ry: baseY - 6, t_rw: 104, t_rh: 134,
           t_lidL: 0.15, t_lidR: 0.05,
-          t_pupilDx: -4, t_pupilDy: 5,
+          t_pupilDx: -5, t_pupilDy: 7,
           t_tiltL: 0.08, t_tiltR: -0.04,
-          t_mouthY: mouthBaseY + 6, t_mouthW: 24, t_mouthH: 5, t_mouthCurve: -7, t_mouthOpen: 0,
+          t_mouthY: mouthBaseY + 8, t_mouthW: 34, t_mouthH: 7, t_mouthCurve: -9, t_mouthOpen: 0,
         };
       case 'stopped':
         // X eyes — squarish so the X reads well
         return {
-          t_lx: 320, t_ly: baseY, t_lw: 70, t_lh: 70,
-          t_rx: 480, t_ry: baseY, t_rw: 70, t_rh: 70,
+          t_lx: 290, t_ly: baseY, t_lw: 110, t_lh: 110,
+          t_rx: 510, t_ry: baseY, t_rw: 110, t_rh: 110,
           t_lidL: 0, t_lidR: 0,
           t_pupilDx: 0, t_pupilDy: 0,
           t_tiltL: 0, t_tiltR: 0,
