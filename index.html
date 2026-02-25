@@ -2,29 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=800,height=480,initial-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>NoriScreen</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
-    width: 800px; height: 480px;
+    width: 100vw; height: 100vh;
     overflow: hidden;
     background: #000;
     font-family: 'Segoe UI', system-ui, sans-serif;
     color: #fff;
     -webkit-user-select: none; user-select: none;
-    /* cursor: none; */ /* uncomment for kiosk mode on Pi */
+    cursor: none;
     touch-action: none;
   }
   canvas#face {
     position: absolute; top: 0; left: 0;
-    width: 800px; height: 480px;
+    width: 100vw; height: 100vh;
   }
 
   /* ---------- overlays ---------- */
   #overlay {
     position: absolute; top: 0; left: 0;
-    width: 800px; height: 480px;
+    width: 100%; height: 100%;
     pointer-events: none;
     display: flex; flex-direction: column;
     justify-content: flex-end;
@@ -120,12 +120,13 @@
 
   /* chat button */
   #chat-btn {
-    width: 48px; height: 48px;
-    border-radius: 24px;
+    height: 40px; padding: 0 16px;
+    border-radius: 20px;
     border: 1.5px solid rgba(255,255,255,0.18);
     background: rgba(255,255,255,0.06);
     color: rgba(255,255,255,0.55);
-    font-size: 22px; line-height: 48px; text-align: center;
+    font-size: 14px; font-weight: 500;
+    line-height: 40px; text-align: center;
     cursor: pointer;
   }
   #chat-btn:active { background: rgba(255,255,255,0.15); }
@@ -261,7 +262,7 @@
 </div>
 
 <div id="controls-tray">
-  <button id="chat-btn">&#x1F4AC;</button>
+  <button id="chat-btn">chat</button>
   <button id="estop">E-STOP</button>
 </div>
 <div id="chat-overlay">
@@ -307,6 +308,14 @@
   // ---- DOM refs ----
   const canvas     = document.getElementById('face');
   const ctx        = canvas.getContext('2d');
+
+  // Resize canvas to actual screen size
+  function resizeCanvas() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
   const $overlay   = document.getElementById('overlay');
   const $panel     = document.getElementById('bottom-panel');
   const $progress  = document.getElementById('progress-area');
@@ -486,25 +495,32 @@
         blinkAccum = 0;
         nextBlink = 2000 + Math.random() * 4000;
       }
-    } else if (blinkPhase === 1) { // closing
+    } else if (blinkPhase === 1) { // closing — 80ms
       blinkTimer += dt;
-      const t = Math.min(blinkTimer / 100, 1);
-      eye.t_lidL = Math.max(eye.t_lidL, t); // don't override mood lid if already higher
-      eye.t_lidR = Math.max(eye.t_lidR, t);
+      const t = Math.min(blinkTimer / 80, 1);
+      // Drive lid directly (bypass lerp) for crisp blink
+      eye.lidL = t;
+      eye.lidR = t;
+      eye.t_lidL = t;
+      eye.t_lidR = t;
       if (t >= 1) { blinkPhase = 2; blinkTimer = 0; }
-    } else if (blinkPhase === 2) { // hold
+    } else if (blinkPhase === 2) { // hold — 60ms
       blinkTimer += dt;
+      eye.lidL = 1; eye.lidR = 1;
       eye.t_lidL = 1; eye.t_lidR = 1;
-      if (blinkTimer >= 80) { blinkPhase = 3; blinkTimer = 0; }
-    } else if (blinkPhase === 3) { // opening
+      if (blinkTimer >= 60) { blinkPhase = 3; blinkTimer = 0; }
+    } else if (blinkPhase === 3) { // opening — 80ms
       blinkTimer += dt;
-      const t = 1 - Math.min(blinkTimer / 100, 1);
       const moodTargets = getMoodTargets(mood, state === STATES.EXECUTING || state === STATES.CONFIRMING);
-      eye.t_lidL = Math.max(moodTargets.t_lidL, t);
-      eye.t_lidR = Math.max(moodTargets.t_lidR, t);
+      const t = 1 - Math.min(blinkTimer / 80, 1);
+      const lidL = Math.max(moodTargets.t_lidL, t);
+      const lidR = Math.max(moodTargets.t_lidR, t);
+      eye.lidL = lidL;
+      eye.lidR = lidR;
+      eye.t_lidL = lidL;
+      eye.t_lidR = lidR;
       if (t <= 0) {
         blinkPhase = 0; blinkTimer = 0;
-        // restore mood lids
         eye.t_lidL = moodTargets.t_lidL;
         eye.t_lidR = moodTargets.t_lidR;
       }
@@ -616,7 +632,15 @@
   }
 
   function render() {
-    ctx.clearRect(0, 0, 800, 480);
+    const W = canvas.width;
+    const H = canvas.height;
+    // Scale factor relative to design size (800x480)
+    const sx = W / 800;
+    const sy = H / 480;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.scale(sx, sy);
 
     // Draw eyes (pupil drift shifts eye position slightly for a "looking around" effect)
     drawEye(eye.lx + eye.pupilDx * 0.5, eye.ly + eye.pupilDy * 0.5, eye.lw, eye.lh, eye.lidL, eye.pupilDx, eye.pupilDy, eye.tiltL);
@@ -624,6 +648,8 @@
 
     // Draw mouth
     drawMouth(eye.mouthY, eye.mouthW, eye.mouthH, eye.mouthCurve, eye.mouthOpen);
+
+    ctx.restore();
   }
 
   // ---- Animation loop ----
