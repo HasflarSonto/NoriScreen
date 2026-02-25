@@ -370,8 +370,8 @@
   const GAZE_RANGE_Y = sy(63);  // ~73px
 
   // Face offset when gaze at edges
-  const FACE_OFFSET_X = sx(60);
-  const FACE_OFFSET_Y = sy(35);
+  const FACE_OFFSET_X = sx(25);
+  const FACE_OFFSET_Y = sy(15);
 
   // Think offset (eyes shift right)
   const THINK_OFFSET_X = sx(30);
@@ -395,7 +395,7 @@
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
     happy: {
-      eye_w: 110, eye_h: 220, openness: 0.35,
+      eye_w: 110, eye_h: 220, openness: 0.6,
       mouth_curve: 0.8, mouth_open: 0, mouth_w: 55,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
@@ -405,7 +405,7 @@
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
     },
     angry: {
-      eye_w: 115, eye_h: 220, openness: 0.35,
+      eye_w: 115, eye_h: 220, openness: 0.5,
       mouth_curve: -0.4, mouth_open: 0, mouth_w: 45,
       no_mouth: false, angry_brows: true, look_side: false, tilt_eyes: true, cat_face: false,
     },
@@ -425,7 +425,7 @@
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: true, cat_face: false,
     },
     excited: {
-      eye_w: 115, eye_h: 220, openness: 0.3,
+      eye_w: 115, eye_h: 220, openness: 0.55,
       mouth_curve: 1.0, mouth_open: 0, mouth_w: 65,
       no_mouth: false, angry_brows: false, look_side: false, tilt_eyes: false, cat_face: false,
     },
@@ -1167,9 +1167,9 @@
         preInteractionEmotion = targetEmotionName;
         setEmotion('cat');
       }
-      // Steer gaze toward finger position (normalized -1 to 1)
-      gazeTargetX = clamp((x - CX) / (800 / 2), -1, 1);
-      gazeTargetY = clamp((y - CY) / (480 / 2), -1, 1);
+      // Steer gaze toward finger — high sensitivity, small moves = big response
+      gazeTargetX = clamp((x - CX) / 120, -1, 1);
+      gazeTargetY = clamp((y - CY) / 80, -1, 1);
     }
   });
 
