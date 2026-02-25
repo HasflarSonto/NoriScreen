@@ -370,8 +370,8 @@
   const GAZE_RANGE_Y = sy(63);  // ~73px
 
   // Face offset when gaze at edges
-  const FACE_OFFSET_X = sx(25);
-  const FACE_OFFSET_Y = sy(15);
+  const FACE_OFFSET_X = sx(60);
+  const FACE_OFFSET_Y = sy(35);
 
   // Think offset (eyes shift right)
   const THINK_OFFSET_X = sx(30);
@@ -717,17 +717,23 @@
       // Whiskers — 3 per side, fanning outward from mouth edges
       const whiskerLen = sx(55);
       ctx.lineWidth = sx(1.5);
-      const whiskerAngles = [-0.3, 0, 0.3]; // radians — fan spread
-      for (const ang of whiskerAngles) {
+      // Each whisker has its own vertical start offset — closer together, further from mouth
+      const wGap = sx(20); // horizontal gap between mouth edge and whisker root
+      const whiskers = [
+        { startY: sy(-2), angle:  0.18 },  // top whisker
+        { startY: sy(5),  angle:  0    },  // middle whisker
+        { startY: sy(12), angle: -0.18 },  // bottom whisker
+      ];
+      for (const w of whiskers) {
         // Left whiskers
         ctx.beginPath();
-        ctx.moveTo(-mhalf - sx(5), sy(5));
-        ctx.lineTo(-mhalf - sx(5) - whiskerLen * Math.cos(ang), sy(5) - whiskerLen * Math.sin(ang));
+        ctx.moveTo(-mhalf - wGap, w.startY);
+        ctx.lineTo(-mhalf - wGap - whiskerLen * Math.cos(w.angle), w.startY - whiskerLen * Math.sin(w.angle));
         ctx.stroke();
         // Right whiskers
         ctx.beginPath();
-        ctx.moveTo(mhalf + sx(5), sy(5));
-        ctx.lineTo(mhalf + sx(5) + whiskerLen * Math.cos(ang), sy(5) - whiskerLen * Math.sin(ang));
+        ctx.moveTo(mhalf + wGap, w.startY);
+        ctx.lineTo(mhalf + wGap + whiskerLen * Math.cos(w.angle), w.startY - whiskerLen * Math.sin(w.angle));
         ctx.stroke();
       }
     } else if (emo.mouth_open > 0.3) {
@@ -830,10 +836,10 @@
     }
 
     // Eye positions — gaze shifts eyes together
-    const lx = CX - EYE_SEP + fOfsX + gPx * 0.5 + thinkOfs;
-    const ly = CY + fOfsY + gPy * 0.5;
-    const rx = CX + EYE_SEP + fOfsX + gPx * 0.5 + thinkOfs;
-    const ry = CY + fOfsY + gPy * 0.5;
+    const lx = CX - EYE_SEP + fOfsX + gPx * 0.8 + thinkOfs;
+    const ly = CY + fOfsY + gPy * 0.8;
+    const rx = CX + EYE_SEP + fOfsX + gPx * 0.8 + thinkOfs;
+    const ry = CY + fOfsY + gPy * 0.8;
 
     const lH = baseH + tiltAdjL;
     const rH = baseH + tiltAdjR;
