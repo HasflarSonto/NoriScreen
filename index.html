@@ -609,20 +609,20 @@
       gazeTargetY = (Math.random() * 2 - 1) * 0.4;
     }
 
-    // Random emotion changes every 8-20s
-    idleEmotionTimer += dt;
-    if (idleEmotionTimer >= nextIdleEmotion) {
-      idleEmotionTimer = 0;
-      nextIdleEmotion = 8000 + Math.random() * 12000;
-      const r = Math.random();
-      let pick;
-      if (r < 0.50)      pick = 'eyes_only';
-      else if (r < 0.70) pick = 'happy';
-      else if (r < 0.85) pick = 'thinking';
-      else if (r < 0.95) pick = 'neutral';
-      else                pick = 'excited';
-      setEmotion(pick);
-    }
+    // Random emotion changes disabled — stay on idle emotion
+    // idleEmotionTimer += dt;
+    // if (idleEmotionTimer >= nextIdleEmotion) {
+    //   idleEmotionTimer = 0;
+    //   nextIdleEmotion = 8000 + Math.random() * 12000;
+    //   const r = Math.random();
+    //   let pick;
+    //   if (r < 0.50)      pick = 'eyes_only';
+    //   else if (r < 0.70) pick = 'happy';
+    //   else if (r < 0.85) pick = 'thinking';
+    //   else if (r < 0.95) pick = 'neutral';
+    //   else                pick = 'excited';
+    //   setEmotion(pick);
+    // }
   }
 
   // ---- Drawing Utilities ----
