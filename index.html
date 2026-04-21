@@ -357,6 +357,11 @@
   function sx(v) { return v * SCALE_X; }
   function sy(v) { return v * SCALE_Y; }
 
+  // Per-axis eye shape tweak, applied on top of emo.eye_w / emo.eye_h
+  // at both draw sites. Tune here to taste.
+  const EYE_W_SCALE = 1.08;
+  const EYE_H_SCALE = 0.92;
+
   // Canvas center
   const CX = 400, CY = 210;
   // Eye separation (LVGL ~70px from center each side)
@@ -826,8 +831,8 @@
     const gPy = gazePixelY();
 
     // Eye sizes from emotion config, scaled
-    const baseW = sx(emo.eye_w);
-    const baseH = sy(emo.eye_h) * breathScale;
+    const baseW = sx(emo.eye_w) * EYE_W_SCALE;
+    const baseH = sy(emo.eye_h) * EYE_H_SCALE * breathScale;
 
     // Tilt: asymmetric eye heights
     let tiltAdjL = 0, tiltAdjR = 0;
@@ -1134,8 +1139,8 @@
     const thinkOfs = emo.look_side ? THINK_OFFSET_X : 0;
     const gPx = gazePixelX();
     const gPy = gazePixelY();
-    const baseW = sx(emo.eye_w);
-    const baseH = sy(emo.eye_h);
+    const baseW = sx(emo.eye_w) * EYE_W_SCALE;
+    const baseH = sy(emo.eye_h) * EYE_H_SCALE;
 
     const lx = CX - EYE_SEP + fOfsX + gPx * 0.3 + thinkOfs;
     const ly = CY + fOfsY + gPy * 0.3;
